@@ -1,3 +1,3 @@
 # PreReleaseFolder
 
-!(images/PreRelease.jpg)
+![BehaveDiagram](/images/PreRelease.jpg)
