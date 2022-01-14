@@ -1,20 +1,20 @@
-import os, datetime
-import csv
+import datetime
 import pycurl
 import sys
 import shutil
 from openpyxl import load_workbook
 import pandas as pd
-import download.box
+#import download.box
 from io import BytesIO
-import numpy as np
 
-from download.box import LifespanBox
+import ccf
+from ccf.box import LifespanBox
 
 
 # This code walks through each of the external datatypes (except pedigrees), subsets to subjects/events in inventory
 # (see Curated Inventory.ipynb in https://github.com/humanconnectome/PreRelease)
 # and filters out variables with PHI
+# KSADS additionally gets a makeover and downstream datatype for cases where MOOD batteries need to be merged into regular record
 # PG-13 unfiltered data types (i.e. with dates, ages>90 and freetext that might mention 'John')
 # can be found on the 'restricted' paths.
 # G-rated (our best effort at scrubbing 26,605 varialbes) data and annotation can be found in Asnaps and Dsnps
@@ -22,10 +22,10 @@ from download.box import LifespanBox
 
 verbose = True
 snapshotdate = datetime.datetime.today().strftime('%m_%d_%Y')
-box_temp='/home/petra/UbWinSharedSpace1/boxtemp' #location of local copy of curated data
+box_temp='./boxtemp' #location of local copy of curated data
 box = LifespanBox(cache=box_temp)
-redcapconfigfile="/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/.boxApp/redcapconfig.csv"
-redcap9configfile="/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/.boxApp/redcap9config.csv"
+redcapconfigfile="./.boxApp/redcapconfig.csv"
+redcap9configfile="./.boxApp/redcap9config.csv"
 
 Asnaps=126706803362
 Dsnaps=126781658067
@@ -35,17 +35,22 @@ DrestrictSnaps=150226955672
 #REORGANIZED AROUND INVENTORY:
 #this is the latest inventory
 
-inventorypath='/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/'
-inventoryA=pd.read_csv(inventorypath+'HCA_AllSources_'+snapshotdate+'.csv')
-inventoryD=pd.read_csv(inventorypath+'HCD_AllSources_'+snapshotdate+'.csv')
+inventorypath='/home/petra/CCF_QC/PreRelease/'
+version='11_19_2021'
+#version=snapshotdate
+snapshotdate
+
+inventoryA=pd.read_csv(inventorypath+'HCA_AllSources_' + version + '.csv')
+inventoryD=pd.read_csv(inventorypath+'HCD_AllSources_' + version + '.csv')
 goodidsD=list(inventoryD.subject.unique())
 goodidsA=list(inventoryA.subject.unique())
 
+"""
 box.upload_file(inventorypath+'HCA_AllSourcesSlim_'+snapshotdate+'.csv', Asnaps)
 box.upload_file(inventorypath+'HCA_AllSources_'+snapshotdate+'.csv', ArestrictSnaps)
 box.upload_file(inventorypath+'HCD_AllSourcesSlim_'+snapshotdate+'.csv', Dsnaps)
 box.upload_file(inventorypath+'HCD_AllSources_'+snapshotdate+'.csv', DrestrictSnaps)
-
+"""
 
 
 ##############################
@@ -68,20 +73,28 @@ print(len(goodPINSA))
 
 
 #Restricted Variables:
-restrictA=pd.read_excel("/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/HCP REDCap Recommended Restricted17Nov2021.xlsx", sheet_name='HCA')
-restrictedA=list(restrictA.field_name)
-restrictCh=pd.read_excel("/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/HCP REDCap Recommended Restricted17Nov2021.xlsx", sheet_name='HCP-D Child')
-restrictedCh=list(restrictCh.field_name)
-restrict18=pd.read_excel("/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/HCP REDCap Recommended Restricted17Nov2021.xlsx", sheet_name='HCD 18+')
-restricted18=list(restrict18.field_name)
-restrictParent=pd.read_excel("/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/HCP REDCap Recommended Restricted17Nov2021.xlsx", sheet_name='HCD Parent')
-restrictedParent=list(restrictParent.field_name)
-restrictQ=pd.read_excel("/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/HCP REDCap Recommended Restricted17Nov2021.xlsx", sheet_name='Q')
-restrictedQ=list(restrictQ.field_name)
-restrictK=pd.read_excel("/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/HCP REDCap Recommended Restricted17Nov2021.xlsx", sheet_name='ksads')
-restrictedK=list(restrictK.field_name)
-restrictS=pd.read_excel("/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/HCP REDCap Recommended Restricted17Nov2021.xlsx", sheet_name='SSAGA')
-restrictedS=list(restrictS.field_name)
+mask_file=[887052446492]
+box=LifespanBox(cache='./')
+a=box.download_files(mask_file)
+
+def getlist(mask,sheet):
+    restrictA=pd.read_excel(mask, sheet_name=sheet)
+    restrictedA=list(restrictA.field_name)
+    return restrictedA
+
+restrictedA=getlist(a[0],'HCA')
+restrictedCh=getlist(a[0],'HCP-D Child')
+restricted18=getlist(a[0],'HCD 18+')
+restrictedParent=getlist(a[0],'HCD Parent')
+restrictedQ=getlist(a[0],'Q')
+restrictedK=getlist(a[0],'ksads')
+restrictedS=getlist(a[0],'SSAGA')
+
+ddict_file=[905784566785]
+b=box.download_files(ddict_file)
+b2=pd.read_excel(b[0], sheet_name='VariablesInMoodRecords')
+moodvars=list(b2.varsInMood)
+
 
 #note that some of the parameters in these macros not used anymore...wanted to leave them in in future versions of this code
 # coudl figure out how to be more concise.
@@ -222,7 +235,120 @@ idstring='HCD'
 studystr='ksads'
 box.upload_file(box_temp+'/REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', Dsnaps)
 box.upload_file(box_temp+'/Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
-#2828 KSADS P,T, and P mood, Tmood batteries in inventory as of 11/19/2021
+
+#kD is the smaller open access dataset
+#kDrestricted is the larger restricted access dataset
+whole=kDrestricted.copy()
+#subject is the same as patientid, except stripped of Mood, where applicable...
+# note that this only will work because data have already been cleaned of
+#unusables (which have duplicates).
+#
+# Can't use regular old update() because only some of the columns have new information for some of the rows.
+whole['subject']=whole['patientid'].str.upper().str.replace('MOOD','').str.replace(' ','').str.replace('-','_').str[:13]
+
+#Mood batteries (T and P) for some subjects.  Need to get the T and P for regular correspondeces.
+moodlist=whole.loc[whole.patientid.str.upper().str.contains('MOOD')]#[['patientid','patienttype','subject']]
+print(moodlist.shape)
+
+#subject records who don't have mood (group A)
+#drop all mood records
+A1=whole.loc[~(whole.patientid.str.upper().str.contains('MOOD'))]
+print(A1.shape)
+#drop regular records for subjects who have moods records too to prevent duplication when they get rolled in later
+#cant just drop.  Need to merge by patienttype
+Asub=pd.merge(A1,moodlist[['patienttype','subject']],how='outer',on=['patienttype','subject'],indicator=True)
+Asub._merge.value_counts()
+#just keep the ones in left_only
+A=Asub.loc[Asub._merge=='left_only'].drop(columns=['_merge'])
+
+print("A1 shape",A1.shape) #402 fewer than whole (dropped all mood records)
+print("A shape",A.shape) #should be 400 fewer records than A1 - eg. the 400 with normie pairs (2 didn't have normies)
+#A should have 802 fewer records than total.  Gonna add back two in b and 400 in C.  Final total should have 2528
+
+#find subject who have only mood records e.g no regular records ;consider rename them as regular records withnote (group B)
+B1=pd.merge(A1,moodlist[['patienttype','subject']],how='right',on=['patienttype','subject'],indicator=True)
+B2=B1.loc[B1._merge=='right_only']  #2
+B=whole.loc[whole.subject.isin(list(B2.subject))]#['HCD0092334_V1','HCD1229239_V1'])]
+B.patientid=B.subject
+B.additionalinfo='Data are usable but only include MOOD batteries'
+
+#print(whole.loc[whole.subject=='HCD0092334_V1'][['patientid','dateofinterview','patienttype']])
+#print(whole.loc[whole.subject=='HCD1229239_V1'][['patientid','dateofinterview','patienttype']])
+#find subjects who have both regular and mood records (both) - separate from rest. (group C)
+C=pd.merge(whole,moodlist[['patienttype','subject']],how='inner',on=['patienttype','subject'])
+C.shape  #802 - this is 400 subjects with both mood and regular plus two subjects with just mood.
+
+#802+2 =804.  804/2=402 = same as moodlist shape. 8293 variables
+#for Group C - separate into C1 and C2.
+# C2 has moodies. C1 has normies.
+C2=C.loc[C.patientid.str.upper().str.contains('MOOD')]
+#drop the records from B which need a rename, not a column overwrite
+C2=C2.loc[~(C2.patientid.isin(['HCD0092334_V1_mood','HCD1229239_V1_mood']))]
+
+C1=C.loc[~(C.patientid.str.upper().str.contains('MOOD'))]
+print(C1.shape)
+print(C2.shape)
+
+#restrict C1 to moodvars,
+# sort by subject and patientid and then reset both indexes so that the following works
+#e.g.
+moodvars
+df1=C1.sort_values(by=['subject','patienttype']).reset_index() #regular records that need to be updated with mood varialbes
+df1=df1.drop(columns=['index']).copy()
+df2=C2.sort_values(by=['subject','patienttype']).reset_index() #mood records
+#restrict df2 to only the moodvars
+a=list(set(list(C2.columns)) & set(moodvars))
+print("Number Moodvars:",len(moodvars))
+print("intersection moodvars and reg",len(a)) #should be one fewers since C2 doesnt have 'Variable / Field Name'
+
+df2=df2[a].copy()
+dropmore=['patientid','patienttype','dateofinterview']
+df2=df2.drop(columns=dropmore).copy()
+#df1 and df2 have same number of rows, indentical indices, and are matched by patientid and patienttype so...
+#replace the columns in df1 with corresponding columns in 2
+print("C1 shape",C1.shape)
+print("C2 shape=",C2.shape)
+print("df1 shape=",df1.shape)
+print("df2 shape=",df2.shape)
+print("number of blanks before update:",(df1=='').sum(axis=0).sum())
+print("number of blanks in C1 before update:",(C1=='').sum(axis=0).sum())
+
+for col in df2.columns:
+    try:
+        col_pos = list(df1.columns).index(col)
+        df1.drop(columns=[col], inplace=True)
+        df1.insert(col_pos, col, df2[col])
+    except ValueError:
+        df1[col] = df2[col]
+
+print("C1 shape",C1.shape)
+print("C2 shape=",C2.shape)
+print("df1 shape=",df1.shape)
+print("df2 shape=",df2.shape)
+print("number of blanks in df2 after update:",(df1=='').sum(axis=0).sum())
+
+#check that the shape of the result is the same as C2=df1 and that the result has more information than prior to find a replace
+#e.g. C1 shape (400, 8294) = new df1 shape.
+#concatenate the pieces back together for restriction mask then upload
+D=pd.concat([A,B,df1],axis=0)
+print('Shape of Original whole',whole.shape)
+print("number of blanks in whole before update:",(whole=='').sum(axis=0).sum())
+
+print('Shape of D',D.shape)
+D.loc[D.patientid.isin(['HCD0092334_V1','HCD1229239_V1'])][['subject','k_unusable_specify']]
+print("number of blanks in D after update:",(D=='').sum(axis=0).sum())
+
+
+Dopen=D.copy()
+Dopen=Dopen.drop(columns=restrictedK)
+
+Dopen.to_csv(box_temp+'/MoodMerge_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
+D.to_csv(box_temp+'/MoodMerge_Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
+#2928 KSADS P,T, and P mood, Tmood batteries in inventory as of 11/19/2021
+#2526 records after merging in the moods.
+
+box.upload_file(box_temp+'/MoodMerge_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', Dsnaps)
+box.upload_file(box_temp+'/MoodMerge_Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
 
 ############### Qinteractive ###############
 qA,qArestricted=getredcap10Q('qint',Asnaps,goodidsA,'HCA',restrictedcols=restrictedQ)
