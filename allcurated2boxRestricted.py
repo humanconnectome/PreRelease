@@ -6,6 +6,8 @@ from openpyxl import load_workbook
 import pandas as pd
 #import download.box
 from io import BytesIO
+import os
+from shutil import copyfile
 
 import ccf
 from ccf.box import LifespanBox
@@ -21,7 +23,8 @@ from ccf.box import LifespanBox
 
 
 verbose = True
-snapshotdate = datetime.datetime.today().strftime('%m_%d_%Y')
+snapshotdate = datetime.datetime.today().strftime('%Y-%m-%d')
+snapshotdate
 box_temp='./boxtemp' #location of local copy of curated data
 box = LifespanBox(cache=box_temp)
 redcapconfigfile="./.boxApp/redcapconfig.csv"
@@ -36,21 +39,30 @@ DrestrictSnaps=150226955672
 #this is the latest inventory
 
 inventorypath='/home/petra/CCF_QC/PreRelease/'
-version='11_19_2021'
+#version='2022_01_19'
+versionold='01_19_2022'
 #version=snapshotdate
 snapshotdate
 
-inventoryA=pd.read_csv(inventorypath+'HCA_AllSources_' + version + '.csv')
-inventoryD=pd.read_csv(inventorypath+'HCD_AllSources_' + version + '.csv')
+inventoryA=pd.read_csv(inventorypath+'HCA_AllSources_' + versionold + '.csv')
+inventoryD=pd.read_csv(inventorypath+'HCD_AllSources_' + versionold + '.csv')
 goodidsD=list(inventoryD.subject.unique())
 goodidsA=list(inventoryA.subject.unique())
 
-"""
-box.upload_file(inventorypath+'HCA_AllSourcesSlim_'+snapshotdate+'.csv', Asnaps)
-box.upload_file(inventorypath+'HCA_AllSources_'+snapshotdate+'.csv', ArestrictSnaps)
-box.upload_file(inventorypath+'HCD_AllSourcesSlim_'+snapshotdate+'.csv', Dsnaps)
-box.upload_file(inventorypath+'HCD_AllSources_'+snapshotdate+'.csv', DrestrictSnaps)
-"""
+#rename before upload for consistency with other files
+'''Maybe {HCD,HCA}_<InstrumentName>_DataDictionary_YYYY_MM_DD.csv
+{Inventory, KSADS, RedCap, RedCap_Child, RedCap_Teen, RedCap_Parent, NIH_Toolbox_Scores, NIH_Toolbox_Raw, Q_Interactive, PennCNP, Eprime, Apoe_Isoforms, Pedigrees}
+'''
+
+copyfile(inventorypath+'HCA_AllSourcesSlim_'+versionold+'.csv',inventorypath+'HCA_Inventory_'+snapshotdate+'.csv')
+copyfile(inventorypath+'HCA_AllSources_'+versionold+'.csv',inventorypath+'HCA_Inventory_Restricted_'+snapshotdate+'.csv')
+copyfile(inventorypath+'HCD_AllSourcesSlim_'+versionold+'.csv',inventorypath+'HCD_Inventory_'+snapshotdate+'.csv')
+copyfile(inventorypath+'HCD_AllSources_'+versionold+'.csv',inventorypath+'HCD_Inventory_Restricted_'+snapshotdate+'.csv')
+
+box.upload_file(inventorypath+'HCA_Inventory_'+snapshotdate+'.csv', Asnaps)
+box.upload_file(inventorypath+'HCA_Inventory_Restricted_'+snapshotdate+'.csv', ArestrictSnaps)
+box.upload_file(inventorypath+'HCD_Inventory_'+snapshotdate+'.csv', Dsnaps)
+box.upload_file(inventorypath+'HCD_Inventory_Restricted_'+snapshotdate+'.csv', DrestrictSnaps)
 
 
 ##############################
@@ -89,6 +101,8 @@ restrictedParent=getlist(a[0],'HCD Parent')
 restrictedQ=getlist(a[0],'Q')
 restrictedK=getlist(a[0],'ksads')
 restrictedS=getlist(a[0],'SSAGA')
+restrictedTLBXS=getlist(a[0],'TLBX_Scores')
+restrictedTLBXR=getlist(a[0],'TLBX_Raw')
 
 ddict_file=[905784566785]
 b=box.download_files(ddict_file)
@@ -140,6 +154,16 @@ def getredcap7(studystr,curatedsnaps,restrictedsnaps,flaggedgold=pd.DataFrame(),
     df = pd.merge(dflink.drop(columns=subj), df, how='right', on=idvar)
     flaggedids=df.loc[df.flagged.isnull()==False][['subject','flagged']]
     print(df.shape)
+    df['redcap_event'] = df.replace({'redcap_event_name':
+                                                 {'visit_1_arm_1': 'V1',
+                                                  'follow_up_1_arm_1': 'F1',
+                                                  'visit_2_arm_1': 'V2',
+                                                  'follow_up_2_arm_1': 'F2',
+                                                  'covid_arm_1': 'Covid',
+                                                  'follow_up_3_arm_1': 'F3',
+                                                  'covid_remote_arm_1': 'CR',
+                                                  'actigraphy_arm_1': 'A',
+                                                  }})['redcap_event_name']
     dfrestricted=df.copy() #[[idvar, 'subject', 'redcap_event_name']+restrictedcols] #send full set so not need merge
     for dropcol in restrictedcols:
         try:
@@ -149,15 +173,18 @@ def getredcap7(studystr,curatedsnaps,restrictedsnaps,flaggedgold=pd.DataFrame(),
     print(df.shape)
     return flaggedids, df, dfrestricted
 
-
+#these are misnomers.  please flip studystr and idstring when calling function
 def getredcap10Q(studystr,curatedsnaps,goodies,idstring,restrictedcols=[]):
     """
     downloads all events and fields in a redcap database
     """
     studydata = pd.DataFrame()
     auth = pd.read_csv(redcap9configfile)
+    print(auth)
     token=auth.loc[auth.study==studystr,'token'].reset_index().token[0]
     subj=auth.loc[auth.study==studystr,'field'].reset_index().field[0]
+    print(token)
+    print(subj)
     idvar='id'
     data = {
         'token': token,
@@ -187,6 +214,9 @@ def getredcap10Q(studystr,curatedsnaps,goodies,idstring,restrictedcols=[]):
         print(df.shape)
         df=df.loc[~(df.q_unusable=='1')]
         print(df.shape)
+        df['subject']=df[subj]
+        df['redcap_event']='V'+df.visit.astype('str')
+        df.loc[df.redcap_event=='VCR','redcap_event']='CR'
         if(idstring=='HCD'):
             df=df.loc[df[subj].str.contains('HCD')].copy()
             df = df.loc[~(df.assessment.str.contains('RAVLT'))].copy()
@@ -223,18 +253,21 @@ def getredcap10Q(studystr,curatedsnaps,goodies,idstring,restrictedcols=[]):
         #except:
         #    pass
     print(df.shape)
-    df.to_csv(box_temp+'/REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
-    dfrestricted.to_csv(box_temp+'/Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
     return df, dfrestricted
 
+'''Maybe {HCD,HCA}_<InstrumentName>_DataDictionary_YYYY_MM_DD.csv
+{Inventory, KSADS, RedCap, RedCap_Child, RedCap_Teen, RedCap_Parent, NIH_Toolbox_Scores, NIH_Toolbox_Raw, Q_Interactive, PennCNP, Eprime, Apoe_Isoforms, Pedigrees}
+'''
 
-
-############### KSADS ###############
+############### KSADS ############### only upload data after mood merge
+#needs to be ksads and not Ksads here because ksads is specific reference to the authorization file handle
 kD,kDrestricted=getredcap10Q('ksads',Dsnaps,goodidsD,'HCD',restrictedcols=restrictedK)
-idstring='HCD'
-studystr='ksads'
-box.upload_file(box_temp+'/REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', Dsnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
+
+#kD.to_csv(box_temp + '/' + studystr + idstring + '_' + snapshotdate + '.csv', index=False)
+#kDrestricted.to_csv(box_temp + '/' + studystr + idstring + '_Restricted_' + snapshotdate + '.csv', index=False)
+#don't upload these again.  Only upload the MOOD merged ones.
+    #box.upload_file(box_temp+'/REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', Dsnaps)
+    #box.upload_file(box_temp+'/Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
 
 #kD is the smaller open access dataset
 #kDrestricted is the larger restricted access dataset
@@ -242,7 +275,7 @@ whole=kDrestricted.copy()
 #subject is the same as patientid, except stripped of Mood, where applicable...
 # note that this only will work because data have already been cleaned of
 #unusables (which have duplicates).
-#
+
 # Can't use regular old update() because only some of the columns have new information for some of the rows.
 whole['subject']=whole['patientid'].str.upper().str.replace('MOOD','').str.replace(' ','').str.replace('-','_').str[:13]
 
@@ -252,40 +285,40 @@ print(moodlist.shape)
 
 #subject records who don't have mood (group A)
 #drop all mood records
-A1=whole.loc[~(whole.patientid.str.upper().str.contains('MOOD'))]
+A1=whole.loc[~(whole.patientid.str.upper().str.contains('MOOD'))].copy()
 print(A1.shape)
 #drop regular records for subjects who have moods records too to prevent duplication when they get rolled in later
 #cant just drop.  Need to merge by patienttype
 Asub=pd.merge(A1,moodlist[['patienttype','subject']],how='outer',on=['patienttype','subject'],indicator=True)
 Asub._merge.value_counts()
 #just keep the ones in left_only
-A=Asub.loc[Asub._merge=='left_only'].drop(columns=['_merge'])
+A=Asub.loc[Asub._merge=='left_only'].drop(columns=['_merge']).copy()
 
 print("A1 shape",A1.shape) #402 fewer than whole (dropped all mood records)
 print("A shape",A.shape) #should be 400 fewer records than A1 - eg. the 400 with normie pairs (2 didn't have normies)
 #A should have 802 fewer records than total.  Gonna add back two in b and 400 in C.  Final total should have 2528
 
 #find subject who have only mood records e.g no regular records ;consider rename them as regular records withnote (group B)
-B1=pd.merge(A1,moodlist[['patienttype','subject']],how='right',on=['patienttype','subject'],indicator=True)
-B2=B1.loc[B1._merge=='right_only']  #2
-B=whole.loc[whole.subject.isin(list(B2.subject))]#['HCD0092334_V1','HCD1229239_V1'])]
+B1=pd.merge(A1,moodlist[['patienttype','subject']],how='right',on=['patienttype','subject'],indicator=True).copy()
+B2=B1.loc[B1._merge=='right_only'].copy()  #2
+B=whole.loc[whole.subject.isin(list(B2.subject))].copy()#['HCD0092334_V1','HCD1229239_V1'])]
 B.patientid=B.subject
 B.additionalinfo='Data are usable but only include MOOD batteries'
 
 #print(whole.loc[whole.subject=='HCD0092334_V1'][['patientid','dateofinterview','patienttype']])
 #print(whole.loc[whole.subject=='HCD1229239_V1'][['patientid','dateofinterview','patienttype']])
 #find subjects who have both regular and mood records (both) - separate from rest. (group C)
-C=pd.merge(whole,moodlist[['patienttype','subject']],how='inner',on=['patienttype','subject'])
+C=pd.merge(whole,moodlist[['patienttype','subject']],how='inner',on=['patienttype','subject']).copy()
 C.shape  #802 - this is 400 subjects with both mood and regular plus two subjects with just mood.
 
 #802+2 =804.  804/2=402 = same as moodlist shape. 8293 variables
 #for Group C - separate into C1 and C2.
 # C2 has moodies. C1 has normies.
-C2=C.loc[C.patientid.str.upper().str.contains('MOOD')]
+C2=C.loc[C.patientid.str.upper().str.contains('MOOD')].copy()
 #drop the records from B which need a rename, not a column overwrite
-C2=C2.loc[~(C2.patientid.isin(['HCD0092334_V1_mood','HCD1229239_V1_mood']))]
+C2=C2.loc[~(C2.patientid.isin(['HCD0092334_V1_mood','HCD1229239_V1_mood']))].copy()
 
-C1=C.loc[~(C.patientid.str.upper().str.contains('MOOD'))]
+C1=C.loc[~(C.patientid.str.upper().str.contains('MOOD'))].copy()
 print(C1.shape)
 print(C2.shape)
 
@@ -338,46 +371,56 @@ print('Shape of D',D.shape)
 D.loc[D.patientid.isin(['HCD0092334_V1','HCD1229239_V1'])][['subject','k_unusable_specify']]
 print("number of blanks in D after update:",(D=='').sum(axis=0).sum())
 
-
+D['PIN']=D.subject
+new = D['PIN'].str.split("_", 1, expand=True)
+D['redcap_event']=new[1]
+D['subject']=new[0]
 Dopen=D.copy()
 Dopen=Dopen.drop(columns=restrictedK)
 
-Dopen.to_csv(box_temp+'/MoodMerge_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
-D.to_csv(box_temp+'/MoodMerge_Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
+#Dopen.to_csv(box_temp+'/MoodMerge_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
+#D.to_csv(box_temp+'/MoodMerge_Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv',index=False)
+Dopen.to_csv(box_temp+'/HCD_KSADS'+'_'+snapshotdate+'.csv',index=False)
+D.to_csv(box_temp+'/HCD_KSADS'+'_Restricted_'+snapshotdate+'.csv',index=False)
 #2928 KSADS P,T, and P mood, Tmood batteries in inventory as of 11/19/2021
 #2526 records after merging in the moods.
 
-box.upload_file(box_temp+'/MoodMerge_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', Dsnaps)
-box.upload_file(box_temp+'/MoodMerge_Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
+box.upload_file(box_temp+'/HCD_KSADS'+'_'+snapshotdate+'.csv', Dsnaps)
+box.upload_file(box_temp+'/HCD_KSADS'+'_Restricted_'+snapshotdate+'.csv', DrestrictSnaps)
+##########################################
+
+'''Maybe {HCD,HCA}_<InstrumentName>_DataDictionary_YYYY_MM_DD.csv
+{Inventory, KSADS, RedCap, RedCap_Child, RedCap_Teen, RedCap_Parent, NIH_Toolbox_Scores, NIH_Toolbox_Raw, Q_Interactive, PennCNP, Eprime, Apoe_Isoforms, Pedigrees}
+'''
 
 ############### Qinteractive ###############
 qA,qArestricted=getredcap10Q('qint',Asnaps,goodidsA,'HCA',restrictedcols=restrictedQ)
-idstring='HCA'
-studystr='qint'
-box.upload_file(box_temp+'/REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', Asnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', ArestrictSnaps)
+idstring='Q-Interactive'
+studystr='HCA'
+
+qA.drop(columns='unusable_specify').to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
+qArestricted.drop(columns='unusable_specify').to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', index=False)
+
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Asnaps)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', ArestrictSnaps)
 
 
 qD,qDrestricted=getredcap10Q('qint',Dsnaps,goodidsD,'HCD',restrictedcols=restrictedQ)
-idstring='HCD'
-studystr='qint'
-box.upload_file(box_temp+'/REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', Dsnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+idstring+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
+idstring='Q-Interactive'
+studystr='HCD'
+qD.drop(columns='unusable_specify').to_csv(box_temp + '/' + studystr + '_'+ idstring + '_' + snapshotdate + '.csv', index=False)
+qDrestricted.drop(columns='unusable_specify').to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', index=False)
+
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Dsnaps)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', DrestrictSnaps)
 
 #Note: as of 11/18 there were 5 extra HCA CR records in data but not inventory due to missing CR survey (and event date)
 #this is just QC to confirm 5 extra records in HCA and none in HCD
-qDrestricted['redcap_event']='V'+qDrestricted.visit
-qArestricted['redcap_event']='V'+qArestricted.visit
-qArestricted['redcap_event']=qArestricted.redcap_event.str.replace('VCR','CR')
-
-qArestricted.redcap_event=qArestricted.redcap_event.str.strip()
-qDrestricted.redcap_event=qDrestricted.redcap_event.str.strip()
-
-test=pd.merge(inventoryA[['subject','redcap_event']],qArestricted,left_on=['subject','redcap_event'],right_on=['subjectid','redcap_event'],how='outer',indicator=True)
-test.loc[test._merge=='right_only' ][['subject','visit','id','redcap_event']]
+test=pd.merge(inventoryA[['subject','redcap_event']],qArestricted,left_on=['subject','redcap_event'],right_on=['subject','redcap_event'],how='outer',indicator=True)
+test.loc[test._merge=='right_only' ][['subject','redcap_event']]
 #qint.shape
-test2=pd.merge(inventoryD[['subject','redcap_event']],qDrestricted,left_on=['subject','redcap_event'],right_on=['subjectid','redcap_event'],how='outer',indicator=True)
-test2.loc[test2._merge=='right_only' ][['subject','visit','id','redcap_event']]
+test2=pd.merge(inventoryD[['subject','redcap_event']],qDrestricted,left_on=['subject','redcap_event'],right_on=['subject','redcap_event'],how='outer',indicator=True)
+test2.loc[test2._merge=='right_only' ][['subject','redcap_event']]
 #end QC
 
 
@@ -385,7 +428,6 @@ test2.loc[test2._merge=='right_only' ][['subject','visit','id','redcap_event']]
 ############### HCA database + define list of excluded subjects  ##########################################
 #create the hca dataframes for export - note that export functionality has been disabled in function definition.
 flaggedhcpa, df, dfrestricted=getredcap7('hcpa',Asnaps,ArestrictSnaps,flaggedgold=pd.DataFrame(),restrictedcols=restrictedA)
-
 #now merge with inventory to get rid of empty events and make doubly sure there are no excluded subjects
 #some subjects did Covid1 but not covid2 and vice versa.  Both are the 'covid' 'redcap_event_name'.
 test=inventoryA.drop_duplicates(subset=['subject','REDCap_id','redcap_event_name'])
@@ -403,12 +445,17 @@ print(df.shape)
 print(test.shape)
 print(inventdfrestricted.shape)
 
+'''Maybe {HCD,HCA}_<InstrumentName>_DataDictionary_YYYY_MM_DD.csv
+{Inventory, KSADS, RedCap, RedCap_Child, RedCap_Teen, RedCap_Parent, NIH_Toolbox_Scores, NIH_Toolbox_Raw, Q_Interactive, PennCNP, Eprime, Apoe_Isoforms, Pedigrees}
+'''
+
 restrictedsnaps=ArestrictSnaps
-studystr='hcpa'
-inventdf.to_csv(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-inventdfrestricted.to_csv(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-box.upload_file(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv', Asnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv', ArestrictSnaps)
+studystr='HCA'
+idstring='RedCap'
+inventdf.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
+inventdfrestricted.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Asnaps)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', ArestrictSnaps)
 
 ############################################################
 flaggedssaga, dfss, dfssres=getredcap7('ssaga',Asnaps,ArestrictSnaps,flaggedgold=pd.DataFrame(),restrictedcols=restrictedS)
@@ -423,9 +470,9 @@ print(test.shape)
 test=test.loc[test.Curated_SSAGA.isin(['YES','YES BUT'])]#1789 on 11/19/21
 test=pd.merge(test,link,left_on='subject',right_on='hcpa_id',how='left')#[['study_id','redcap_event_name']]
 print(test.shape) #these are the subevent=covid1 people with SSAGA and visit data
-test2=test[['study_id','redcap_event_name']]
-
-#add four who aren't in inventory because have ssaga but no v2 - the rest of the discrepancies (1831 vs 1793) are empty ssagas or withdrawns
+test2=test[['study_id','redcap_event_name','redcap_event','subject']]
+test2
+#add four who aren't in inventory because have ssaga but no v2 in main REDCap- the rest of the discrepancies (1831 vs 1793) are empty ssagas or withdrawns
 extrasubjects=dfss.loc[(dfss.study_id.isin(["9", "12", "9532-280", "9533-257"])) & (dfss.redcap_event_name=='visit_2_arm_1')][['study_id','redcap_event_name']]
 test3=pd.concat([test2,extrasubjects])
 print(test3.shape)
@@ -442,12 +489,14 @@ print(inventssres.shape)
 
 curatedsnaps=Asnaps
 restrictedsnaps=ArestrictSnaps
-studystr='ssaga'
 
-inventss.to_csv(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-inventssres.to_csv(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-box.upload_file(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv', Asnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv', ArestrictSnaps)
+studystr='HCA'
+idstring='SSAGA'
+
+inventdf.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
+inventdfrestricted.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Asnaps)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', ArestrictSnaps)
 
 
 
@@ -477,14 +526,14 @@ inventdfcr=inventdfcr.drop(columns='REDCap_id')
 print(dfcrestricted.shape)
 print(testD.shape)
 print(inventdfcr.shape)
+###you are here###
+idstring='RedCap-Child'
+studystr='HCD'
 
-
-studystr='hcpdchild'
-
-inventdfc.to_csv(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-inventdfcr.to_csv(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-box.upload_file(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv', Dsnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
+inventdfc.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
+inventdfcr.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Dsnaps)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', DrestrictSnaps)
 
 #Asnaps=126706803362
 #Dsnaps=126781658067
@@ -517,13 +566,15 @@ print(df18restricted.shape)
 print(testD18.shape)
 print(inventdfcr18.shape)
 
-studystr='hcpd18'
 
-inventd18.to_csv(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-inventdfcr18.to_csv(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
+idstring='RedCap-Teen'
+studystr='HCD'
 
-box.upload_file(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv', Dsnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
+
+inventd18.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
+inventdfcr18.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Dsnaps)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', DrestrictSnaps)
 
 
 ######### HCD parents ###################################################################################
@@ -564,29 +615,30 @@ print(parentsr.shape)
 
 curatedsnaps=Dsnaps
 restrictedsnaps=DrestrictSnaps
-studystr='hcpdparent'
+idstring='RedCap-Parent'
+studystr='HCD'
 
-parents.to_csv(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-parentsr.to_csv(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv',index=False)
-box.upload_file(box_temp+'/REDCap_'+studystr+'_'+snapshotdate+'.csv', Dsnaps)
-box.upload_file(box_temp+'/Restricted_REDCap_'+studystr+'_'+snapshotdate+'.csv', DrestrictSnaps)
+parents.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
+parentsr.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', index=False)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Dsnaps)
+box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', DrestrictSnaps)
 
 
 ##############################
 
 
-eprime=box.download_file(495490047901)
-eprimed=pd.read_csv(box_temp+'/'+eprime.get().name,header=0)
+eprime=box.downloadFile(495490047901)
+eprimed=pd.read_csv(eprime,header=0)
 eprimed=eprimed.loc[(eprimed.subject.isin(goodidsD))].copy()
 eprimed=eprimed.loc[eprimed.exclude==0].copy()
-eprimed.to_csv(box_temp+'/Eprime_DelayDiscounting_'+snapshotdate+'.csv',index=False)
-box.upload_file(box_temp+'/Eprime_DelayDiscounting_'+snapshotdate+'.csv',Dsnaps)
+eprimed.to_csv(box_temp+'/HCD_Eprime_'+snapshotdate+'.csv',index=False)
+box.upload_file(box_temp+'/HCD_Eprime_'+snapshotdate+'.csv',Dsnaps)
 
 ##############################
+penncnp=box.downloadFile(452784840845)
+#penn=pd.read_csv(box_temp+'/'+penncnp.get().name,header=0,encoding = "ISO-8859-1")
+penn=pd.read_csv(penncnp,header=0,encoding = "ISO-8859-1")
 
-
-penncnp=box.download_file(452784840845)
-penn=pd.read_csv(box_temp+'/'+penncnp.get().name,header=0,encoding = "ISO-8859-1")
 print(penn.shape)
 penn=penn.loc[~(penn.p_unusable==1)]
 penn=penn.loc[penn.CC.isnull()==True]
@@ -594,19 +646,24 @@ penn=penn.drop(columns=['age'])
 
 
 penn=penn.loc[(penn.subid.isin(goodidsD+goodidsA))].copy()
+penn['subject']=penn.subid
+penn['redcap_event']=penn.assessment
+
 print(penn.shape)
+print(penn.columns)
 
-penn.loc[penn.subid.str.contains('HCA')].to_csv(box_temp+'/HCAonly_AllSites_PENNCNP_'+snapshotdate+'.csv',index=False)
-penn.loc[penn.subid.str.contains('HCD')].to_csv(box_temp+'/HCDonly_AllSites_PENNCNP_'+snapshotdate+'.csv',index=False)
-box.upload_file(box_temp+'/HCAonly_AllSites_PENNCNP_'+snapshotdate+'.csv',Asnaps)
-box.upload_file(box_temp+'/HCDonly_AllSites_PENNCNP_'+snapshotdate+'.csv',Dsnaps)
+penn.loc[penn.subid.str.contains('HCA')].to_csv(box_temp+'/HCA_PennCNP_'+snapshotdate+'.csv',index=False)
+penn.loc[penn.subid.str.contains('HCD')].to_csv(box_temp+'/HCD_PennCNP_'+snapshotdate+'.csv',index=False)
+box.upload_file(box_temp+'/HCA_PennCNP_'+snapshotdate+'.csv',Asnaps)
+box.upload_file(box_temp+'/HCD_PennCNP_'+snapshotdate+'.csv',Dsnaps)
 
-
+#box.download_files(mask_file)
 ########### Toolbox #################################
 goodPINS=goodPINSA+goodPINSD
 
 #Toolbox drop date fields 'DateFinished',
-scorecolumns=['PIN', 'DeviceID', 'Assessment Name', 'Inst',
+#visit is renamed redcap_event for consistency across datatypes in the function
+scorecolumns=['subject','visit','PIN', 'DeviceID', 'Assessment Name', 'Inst',
        'RawScore', 'Theta', 'TScore', 'SE', 'ItmCnt',
        'Column1', 'Column2', 'Column3', 'Column4', 'Column5', 'Language',
        'Computed Score', 'Uncorrected Standard Score',
@@ -624,41 +681,47 @@ scorecolumns=['PIN', 'DeviceID', 'Assessment Name', 'Inst',
        'Static Visual Acuity logMAR', 'Static Visual Acuity Snellen',
        'InstrumentBreakoff', 'InstrumentStatus2', 'InstrumentRCReason',
        'InstrumentRCReasonOther', 'App Version', 'iPad Version',
-       'Firmware Version','subject','visit']
+       'Firmware Version']
 
 #'DateCreated', 'InstStarted', 'InstEnded',
-datacolumns=['PIN', 'DeviceID', 'Assessment Name',
+datacolumns=['subject','visit','PIN', 'DeviceID', 'Assessment Name',
        'InstOrdr', 'InstSctn', 'ItmOrdr', 'Inst', 'Locale', 'ItemID',
        'Response', 'Score', 'Theta', 'TScore', 'SE', 'DataType', 'Position',
        'ResponseTime',
-       'App Version', 'iPad Version', 'Firmware Version','subject','visit']
+       'App Version', 'iPad Version', 'Firmware Version']
 
 
-
+#no restricted counterparts for NIHTOOLBOX...leaving code in incase want to deal
 def tlbxtrans2(fileid,curatedsnaps,restrictsnaps,goodPINS,typed):
-    fname=box.download_file(fileid)
-    df=pd.read_csv(box_temp+'/'+fname.get().name,header=0)
+    fname=box.downloadFile(fileid)
+    print(typed,fileid)
+    #df=pd.read_csv(box_temp+'/'+fname.get().name,header=0)
+    df = pd.read_csv(fname, header=0)
     print(len(df.PIN.unique()))
-    print(df.shape)
+    print('Downloaded Shape',df.shape)
     df=df.loc[df.PIN.isin(goodPINS)].copy()
-    print(df.shape)
+    print('Shape after exclusions',df.shape)
     print(len(df.PIN.unique()))
-    dfr=df.copy()
+    #dfr=df.copy()
     if typed=='Scores':
         df=df[scorecolumns]
+        #cols=scorecolumns + restrictedTLBXS
+        #dfr=dfr[cols]
     if typed=='Raw':
         df=df[datacolumns]
-    df.to_csv(box_temp+'/Filtered_'+snapshotdate+fname.get().name,index=False)
-    dfr.to_csv(box_temp+'/Restricted_Filtered_'+snapshotdate+fname.get().name,index=False)
-    print(df.shape)
-    print(dfr.shape)
-    box.upload_file(box_temp+'/Filtered_'+snapshotdate+fname.get().name,curatedsnaps)
-    box.upload_file(box_temp+'/Restricted_Filtered_'+snapshotdate+fname.get().name,restrictsnaps)
-
-
+    df=df.rename(columns={'visit':'redcap_event'})
+        #colr = datacolumns + restrictedTLBXR
+        #dfr=dfr[colr]
+    #df.to_csv(box_temp+'/Filtered_'+snapshotdate+fname.get().name,index=False)
+    #dfr.to_csv(box_temp+'/Restricted_Filtered_'+snapshotdate+fname.get().name,index=False)
+    print('final shape',df.shape)
+    #print('final restricted shape',dfr.shape)
+    #box.upload_file(box_temp+'/Filtered_'+snapshotdate+fname.get().name,curatedsnaps)
+    #box.upload_file(box_temp+'/Restricted_Filtered_'+snapshotdate+fname.get().name,restrictsnaps)
+    return df #, dfr
 
 #get curated fileids
-exportpath="/home/petra/UbWinSharedSpace1/ccf-nda-behavioral/PycharmToolbox/ccfQC/ccf-behavioral/src/"
+exportpath="./"
 curated=pd.read_csv(exportpath+"CuratedToolboxBoxFiles.csv")
 
 HS=curated.loc[(curated.study=='HCD') & (curated.site=='MGH/Harvard') & (curated.type=='Scores')].reset_index().fileid[0]
@@ -692,37 +755,64 @@ Dsnaps=126781658067
 ArestrictSnaps=150224568988
 DrestrictSnaps=150226955672
 #fileid,curatedsnaps,restrictsnaps,goodPINS,typed
-tlbxtrans2(HS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #HarvardScores
-tlbxtrans2(HR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #HarvardRaw
+#All the HCD
+hs=tlbxtrans2(HS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #HarvardScores
+rawhs=tlbxtrans2(HR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #HarvardRaw
 
-tlbxtrans2(WUDS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #WashUD scores
-tlbxtrans2(WUDR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #WashUD raw
+wus=tlbxtrans2(WUDS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #WashUD scores
+rwus=tlbxtrans2(WUDR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #WashUD raw
 
-tlbxtrans2(UMDS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #umn D scores
-tlbxtrans2(UMDR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #umn D raw
+ums=tlbxtrans2(UMDS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #umn D scores
+rums=tlbxtrans2(UMDR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #umn D raw
 
-tlbxtrans2(UCDS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #UCLA D Scored
-tlbxtrans2(UCDR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #UCLA D raw
+ucs=tlbxtrans2(UCDS,Dsnaps,DrestrictSnaps,goodPINS,'Scores') #UCLA D Scored
+rucs=tlbxtrans2(UCDR,Dsnaps,DrestrictSnaps,goodPINS,'Raw') #UCLA D raw
 
-tlbxtrans2(MGS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #MGHScores
-tlbxtrans2(MGR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #MGHRaw
+DS=pd.concat([hs,wus,ums,ucs])
+for i in [hs,wus,ums,ucs]:
+    print(i.shape)
+RawDS=pd.concat([rawhs,rwus,rums,rucs])
+for i in [rawhs,rwus,rums,rucs]:
+    print(i.shape)
 
-tlbxtrans2(WUAS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #WashUA scores
-tlbxtrans2(WUAR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #WashUA raw
+print(DS.shape)
+print(RawDS.shape)
 
-tlbxtrans2(UMAS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #umn A scores
-tlbxtrans2(UMAR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #umn A raw
 
-tlbxtrans2(UCAS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #UCLA A scored
-tlbxtrans2(UCAR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #UCLA A raw
+DS.to_csv(box_temp+'/HCD_NIH-Toolbox-Scores_'+snapshotdate+'.csv',index=False)
+RawDS.to_csv(box_temp+'/HCD_NIH-Toolbox-Raw_'+snapshotdate+'.csv',index=False)
+box.upload_file(box_temp+'/HCD_NIH-Toolbox-Scores_'+snapshotdate+'.csv',Dsnaps)
+box.upload_file(box_temp+'/HCD_NIH-Toolbox-Raw_'+snapshotdate+'.csv',Dsnaps)
+
+
+
+amgs=tlbxtrans2(MGS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #MGHScores
+amgr=tlbxtrans2(MGR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #MGHRaw
+
+awuas=tlbxtrans2(WUAS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #WashUA scores
+awuar=tlbxtrans2(WUAR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #WashUA raw
+
+aumns=tlbxtrans2(UMAS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #umn A scores
+aumnr=tlbxtrans2(UMAR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #umn A raw
+
+aucs=tlbxtrans2(UCAS,Asnaps,ArestrictSnaps,goodPINS,'Scores') #UCLA A scored
+aucr=tlbxtrans2(UCAR,Asnaps,ArestrictSnaps,goodPINS,'Raw') #UCLA A raw
+
+
+AS=pd.concat([amgs,awuas,aumns,aucs])
+for i in [amgs,awuas,aumns,aucs]:
+    print(i.shape)
+RawAS=pd.concat([amgr,awuar,aumnr,aucr])
+for i in [amgr,awuar,aumnr,aucr]:
+    print(i.shape)
+
+print(AS.shape)
+print(RawAS.shape)
+AS.to_csv(box_temp+'/HCA_NIH_Toolbox_Scores_'+snapshotdate+'.csv',index=False)
+RawAS.to_csv(box_temp+'/HCA_NIH_Toolbox_Raw_'+snapshotdate+'.csv',index=False)
+box.upload_file(box_temp+'/HCA_NIH_Toolbox_Scores_'+snapshotdate+'.csv',Asnaps)
+box.upload_file(box_temp+'/HCA_NIH_Toolbox_Raw_'+snapshotdate+'.csv',Asnaps)
 
 #inventory has been independently checked to make sure that no exclusions/withdrawn subjects squeaked in
-
-
-
-
-
-
- #  box.upload_file(box_temp+'/'+fname+'_data_'+snapshotdate+'.csv',fnumber)
 
 
