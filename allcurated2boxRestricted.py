@@ -13,6 +13,8 @@ import ccf
 from ccf.box import LifespanBox
 
 
+
+
 # This code walks through each of the external datatypes (except pedigrees), subsets to subjects/events in inventory
 # (see Curated Inventory.ipynb in https://github.com/humanconnectome/PreRelease)
 # and filters out variables with PHI
@@ -40,7 +42,7 @@ DrestrictSnaps=150226955672
 
 inventorypath='/home/petra/CCF_QC/PreRelease/'
 #version='2022_01_19'
-versionold='01_19_2022'
+versionold='02_04_2022'
 #version=snapshotdate
 snapshotdate
 
@@ -85,14 +87,14 @@ print(len(goodPINSA))
 
 
 #Restricted Variables:
-mask_file=[887052446492]
-box=LifespanBox(cache='./')
-a=box.download_files(mask_file)
-
+mask_file=[887050736739]
 def getlist(mask,sheet):
     restrictA=pd.read_excel(mask, sheet_name=sheet)
     restrictedA=list(restrictA.field_name)
     return restrictedA
+box=LifespanBox(cache='./')
+
+a=box.download_files(mask_file)
 
 restrictedA=getlist(a[0],'HCA')
 restrictedCh=getlist(a[0],'HCP-D Child')
@@ -157,11 +159,15 @@ def getredcap7(studystr,curatedsnaps,restrictedsnaps,flaggedgold=pd.DataFrame(),
     df['redcap_event'] = df.replace({'redcap_event_name':
                                                  {'visit_1_arm_1': 'V1',
                                                   'follow_up_1_arm_1': 'F1',
+                                                  'visit_arm_1':'V1',
                                                   'visit_2_arm_1': 'V2',
+                                                  'visit_3_arm_1': 'V3',
                                                   'follow_up_2_arm_1': 'F2',
+                                                  'follow_up_arm_1': 'F1',
                                                   'covid_arm_1': 'Covid',
                                                   'follow_up_3_arm_1': 'F3',
                                                   'covid_remote_arm_1': 'CR',
+                                                  'covid_2_arm_1':'Covid2',
                                                   'actigraphy_arm_1': 'A',
                                                   }})['redcap_event_name']
     dfrestricted=df.copy() #[[idvar, 'subject', 'redcap_event_name']+restrictedcols] #send full set so not need merge
@@ -462,12 +468,14 @@ flaggedssaga, dfss, dfssres=getredcap7('ssaga',Asnaps,ArestrictSnaps,flaggedgold
 
 link=dfss.loc[dfss.hcpa_id.isnull()==False][['hcpa_id','study_id']]
 link=link.loc[~(link.hcpa_id=="")]
+print(link.shape)
 print(inventoryA.shape)
 test=inventoryA.loc[~(inventoryA.sub_event=='7.Covid1')] #remove source of dups irrelevant to ssaga (it was relevent to HCPA records so couldnt do this there)
 print(test.shape)
 test=test.drop_duplicates(subset=['subject','REDCap_id','redcap_event_name'])
 print(test.shape)
 test=test.loc[test.Curated_SSAGA.isin(['YES','YES BUT'])]#1789 on 11/19/21
+test.shape
 test=pd.merge(test,link,left_on='subject',right_on='hcpa_id',how='left')#[['study_id','redcap_event_name']]
 print(test.shape) #these are the subevent=covid1 people with SSAGA and visit data
 test2=test[['study_id','redcap_event_name','redcap_event','subject']]
@@ -477,12 +485,12 @@ extrasubjects=dfss.loc[(dfss.study_id.isin(["9", "12", "9532-280", "9533-257"]))
 test3=pd.concat([test2,extrasubjects])
 print(test3.shape)
 
-inventss=pd.merge(test3,dfss, left_on=['study_id','redcap_event_name'],right_on=['study_id','redcap_event_name'],how='left')
+inventss=pd.merge(test3.drop(columns=['redcap_event', 'subject']),dfss, left_on=['study_id','redcap_event_name'],right_on=['study_id','redcap_event_name'],how='left')
 inventss=inventss.drop(columns='study_id')
 print(dfss.shape) #if not 1831 - see note above and find the change
 print(inventss.shape)
 
-inventssres=pd.merge(test3,dfssres, left_on=['study_id','redcap_event_name'],right_on=['study_id','redcap_event_name'],how='left')
+inventssres=pd.merge(test3.drop(columns=['redcap_event', 'subject']),dfssres, left_on=['study_id','redcap_event_name'],right_on=['study_id','redcap_event_name'],how='left')
 inventssres=inventssres.drop(columns='study_id')
 print(dfssres.shape)
 print(inventssres.shape)
@@ -493,8 +501,8 @@ restrictedsnaps=ArestrictSnaps
 studystr='HCA'
 idstring='SSAGA'
 
-inventdf.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
-inventdfrestricted.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
+inventss.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
+inventssres.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Asnaps)
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', ArestrictSnaps)
 
@@ -532,6 +540,7 @@ studystr='HCD'
 
 inventdfc.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
 inventdfcr.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
+inventdfcr[['subject','redcap_event']]
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Dsnaps)
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', DrestrictSnaps)
 
@@ -580,9 +589,13 @@ box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + sn
 ######### HCD parents ###################################################################################
 flaggedparent, dfparent, dfparentrest=getredcap7('hcpdparent',Dsnaps,DrestrictSnaps,flaggedgold=pd.DataFrame(),restrictedcols=restrictedParent)
 #need to not restrict the two-parent cases
+#both dfparent and dfparentrest have 'subject' equal to parent_at_V1.  This is not useful.
+#change subject to child subject
+dfparent=dfparent.rename(columns={'subject':'parent_at_V1'})
+dfparentrest=dfparentrest.rename(columns={'subject':'parent_at_V1'})
 
-parentD=inventoryD.loc[~(inventoryD.DB_Source.isin(['teen','child_only']))][['REDCap_id_parent','redcap_event_name']]
-inventp=pd.merge(parentD[['REDCap_id_parent','redcap_event_name']],dfparent, left_on=['REDCap_id_parent','redcap_event_name'],right_on=['id','redcap_event_name'],how='left')
+parentD=inventoryD.loc[~(inventoryD.DB_Source.isin(['teen','child_only']))][['REDCap_id_parent','redcap_event_name','subject']]
+inventp=pd.merge(parentD[['REDCap_id_parent','redcap_event_name','subject']],dfparent, left_on=['REDCap_id_parent','redcap_event_name'],right_on=['id','redcap_event_name'],how='left')
 inventp=inventp.drop(columns='REDCap_id_parent')
 print(inventp.shape)
 #listgoodies=list(inventp.id.unique()) #these redcap ids are of parents of legit children
@@ -593,14 +606,18 @@ print(inventp.shape)
 #dfparent.loc[dfparent.parent_id=='HCD5555474'][['child_id','parent_id','id']]
 extraids=['6105-302','6106-255','6106-159'] #one has two events
 extraparents=dfparent.loc[dfparent.id.isin(extraids)]
-
+'''     parent_at_V1        id
+1778   HCD3062037  6105-302
+2287   HCD5555474  6106-159
+2522   HCD4351251  6106-255
+2523   HCD4351251  6106-255
+'''
 #put them together
 parents=pd.concat([inventp,extraparents])
 print(parents.shape)
 
-
 #restricted
-inventpr=pd.merge(parentD[['REDCap_id_parent','redcap_event_name']],dfparentrest, left_on=['REDCap_id_parent','redcap_event_name'],right_on=['id','redcap_event_name'],how='left')
+inventpr=pd.merge(parentD[['REDCap_id_parent','redcap_event_name','subject']],dfparentrest, left_on=['REDCap_id_parent','redcap_event_name'],right_on=['id','redcap_event_name'],how='left')
 inventpr=inventpr.drop(columns='REDCap_id_parent')
 print(inventpr.shape)
 
