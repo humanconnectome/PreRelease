@@ -1,5 +1,5 @@
 import datetime
-import pycurl
+#import pycurl
 import sys
 import shutil
 from openpyxl import load_workbook
@@ -40,9 +40,9 @@ DrestrictSnaps=150226955672
 #REORGANIZED AROUND INVENTORY:
 #this is the latest inventory
 
-inventorypath='/home/petra/CCF_QC/PreRelease/'
+inventorypath='/home/petra/Behavioral/Lifespan/PreRelease/PreRelease/'
 #version='2022_01_19'
-versionold='02_04_2022'
+versionold='11_01_2022'
 #version=snapshotdate
 snapshotdate
 
@@ -52,9 +52,9 @@ goodidsD=list(inventoryD.subject.unique())
 goodidsA=list(inventoryA.subject.unique())
 
 #rename before upload for consistency with other files
-'''Maybe {HCD,HCA}_<InstrumentName>_DataDictionary_YYYY_MM_DD.csv
-{Inventory, KSADS, RedCap, RedCap_Child, RedCap_Teen, RedCap_Parent, NIH_Toolbox_Scores, NIH_Toolbox_Raw, Q_Interactive, PennCNP, Eprime, Apoe_Isoforms, Pedigrees}
-'''
+#'''Maybe {HCD,HCA}_<InstrumentName>_DataDictionary_YYYY_MM_DD.csv
+#{Inventory, KSADS, RedCap, RedCap_Child, RedCap_Teen, RedCap_Parent, NIH_Toolbox_Scores, NIH_Toolbox_Raw, Q_Interactive, PennCNP, Eprime, Apoe_Isoforms, Pedigrees}
+#'''
 
 copyfile(inventorypath+'HCA_AllSourcesSlim_'+versionold+'.csv',inventorypath+'HCA_Inventory_'+snapshotdate+'.csv')
 copyfile(inventorypath+'HCA_AllSources_'+versionold+'.csv',inventorypath+'HCA_Inventory_Restricted_'+snapshotdate+'.csv')
@@ -87,7 +87,7 @@ print(len(goodPINSA))
 
 
 #Restricted Variables:
-mask_file=[887050736739]
+mask_file=[937222289846]
 def getlist(mask,sheet):
     restrictA=pd.read_excel(mask, sheet_name=sheet)
     restrictedA=list(restrictA.field_name)
@@ -606,12 +606,12 @@ print(inventp.shape)
 #dfparent.loc[dfparent.parent_id=='HCD5555474'][['child_id','parent_id','id']]
 extraids=['6105-302','6106-255','6106-159'] #one has two events
 extraparents=dfparent.loc[dfparent.id.isin(extraids)]
-'''     parent_at_V1        id
-1778   HCD3062037  6105-302
-2287   HCD5555474  6106-159
-2522   HCD4351251  6106-255
-2523   HCD4351251  6106-255
-'''
+#'''     parent_at_V1        id
+#1778   HCD3062037  6105-302
+#2287   HCD5555474  6106-159
+#2522   HCD4351251  6106-255
+#2523   HCD4351251  6106-255
+#'''
 #put them together
 parents=pd.concat([inventp,extraparents])
 print(parents.shape)
@@ -634,6 +634,10 @@ curatedsnaps=Dsnaps
 restrictedsnaps=DrestrictSnaps
 idstring='RedCap-Parent'
 studystr='HCD'
+
+parents=parents.loc[parents.redcap_event_name.isnull()==False]
+parentsr=parentsr.loc[parentsr.redcap_event_name.isnull()==False]
+
 
 parents.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
 parentsr.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', index=False)
