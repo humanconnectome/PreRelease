@@ -1,5 +1,5 @@
 import datetime
-#import pycurl
+import pycurl
 import sys
 import shutil
 from openpyxl import load_workbook
@@ -42,7 +42,7 @@ DrestrictSnaps=150226955672
 
 inventorypath='/home/petra/Behavioral/Lifespan/PreRelease/PreRelease/'
 #version='2022_01_19'
-versionold='11_01_2022'
+versionold='11_22_2022'
 #version=snapshotdate
 snapshotdate
 
@@ -401,6 +401,9 @@ box.upload_file(box_temp+'/HCD_KSADS'+'_Restricted_'+snapshotdate+'.csv', Drestr
 
 ############### Qinteractive ###############
 qA,qArestricted=getredcap10Q('qint',Asnaps,goodidsA,'HCA',restrictedcols=restrictedQ)
+#drop HCA9461182 V2 if it exists [it doesnt for Q, but putting here, just in case)
+qA=qA.loc[~((qA.subject=='HCA9461182') & (qA.redcap_event=='V2'))].copy()
+qA=qArestricted.loc[~((qArestricted.subject=='HCA9461182') & (qA.redcap_event=='V2'))].copy()
 idstring='Q-Interactive'
 studystr='HCA'
 
@@ -414,6 +417,9 @@ box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + sn
 qD,qDrestricted=getredcap10Q('qint',Dsnaps,goodidsD,'HCD',restrictedcols=restrictedQ)
 idstring='Q-Interactive'
 studystr='HCD'
+#make sure the new guys are here
+qD.loc[qD.subject.isin(['HCD0123824','HCD2059043'])]
+
 qD.drop(columns='unusable_specify').to_csv(box_temp + '/' + studystr + '_'+ idstring + '_' + snapshotdate + '.csv', index=False)
 qDrestricted.drop(columns='unusable_specify').to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', index=False)
 
@@ -436,6 +442,9 @@ test2.loc[test2._merge=='right_only' ][['subject','redcap_event']]
 flaggedhcpa, df, dfrestricted=getredcap7('hcpa',Asnaps,ArestrictSnaps,flaggedgold=pd.DataFrame(),restrictedcols=restrictedA)
 #now merge with inventory to get rid of empty events and make doubly sure there are no excluded subjects
 #some subjects did Covid1 but not covid2 and vice versa.  Both are the 'covid' 'redcap_event_name'.
+df=df.loc[~((df.subject=='HCA9461182') & (df.redcap_event_name=='visit_2_arm_1'))].copy()
+dfrestricted=dfrestricted.loc[~((dfrestricted.subject=='HCA9461182') & (dfrestricted.redcap_event_name=='visit_2_arm_1'))].copy()
+
 test=inventoryA.drop_duplicates(subset=['subject','REDCap_id','redcap_event_name'])
 
 inventdf=pd.merge(test[['REDCap_id','redcap_event_name']],df, left_on=['REDCap_id','redcap_event_name'],right_on=['id','redcap_event_name'],how='left')
@@ -460,11 +469,16 @@ studystr='HCA'
 idstring='RedCap'
 inventdf.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
 inventdfrestricted.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
+inventdf.loc[((inventdf.subject=='HCA9461182') & (inventdf.redcap_event_name=='visit_2_arm_1'))]
+
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Asnaps)
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', ArestrictSnaps)
 
 ############################################################
 flaggedssaga, dfss, dfssres=getredcap7('ssaga',Asnaps,ArestrictSnaps,flaggedgold=pd.DataFrame(),restrictedcols=restrictedS)
+#subject has no SSAGA data, but confirm
+dfss.loc[((dfss.subject=='HCA9461182'))]# & (dfss.redcap_event_name=='visit_2_arm_1'))]
+dfss.loc[((dfss.study_id=='9531-258'))]# & (dfss.redcap_event_name=='visit_2_arm_1'))]
 
 link=dfss.loc[dfss.hcpa_id.isnull()==False][['hcpa_id','study_id']]
 link=link.loc[~(link.hcpa_id=="")]
@@ -508,7 +522,6 @@ box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + sn
 
 
 
-
 #   HCD child   ####################################### #############################################
 flaggedhcpd, dfc, dfcrestricted=getredcap7('hcpdchild',Dsnaps,DrestrictSnaps,flaggedgold=pd.DataFrame(),restrictedcols=restrictedCh)
 
@@ -541,6 +554,8 @@ studystr='HCD'
 inventdfc.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
 inventdfcr.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv',index=False)
 inventdfcr[['subject','redcap_event']]
+#double check that new data tricked in
+inventdfc.loc[inventdfc.subject.isin(['HCD0123824','HCD2059043'])] #only expect V1 not covid surveys which were collected by parents
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', Dsnaps)
 box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', DrestrictSnaps)
 
@@ -638,6 +653,9 @@ studystr='HCD'
 parents=parents.loc[parents.redcap_event_name.isnull()==False]
 parentsr=parentsr.loc[parentsr.redcap_event_name.isnull()==False]
 
+#check new ones made it - yep
+parents.loc[parents.subject.isin(['HCD0123824','HCD2059043'])] #only expect V1 not covid surveys which were collected by parents
+
 
 parents.to_csv(box_temp + '/' + studystr + '_' + idstring + '_' + snapshotdate + '.csv', index=False)
 parentsr.to_csv(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + snapshotdate + '.csv', index=False)
@@ -672,6 +690,7 @@ penn['redcap_event']=penn.assessment
 
 print(penn.shape)
 print(penn.columns)
+#no Penn data for ['HCD0123824','HCD2059043']
 
 penn.loc[penn.subid.str.contains('HCA')].to_csv(box_temp+'/HCA_PennCNP_'+snapshotdate+'.csv',index=False)
 penn.loc[penn.subid.str.contains('HCD')].to_csv(box_temp+'/HCD_PennCNP_'+snapshotdate+'.csv',index=False)
@@ -835,5 +854,5 @@ box.upload_file(box_temp+'/HCA_NIH_Toolbox_Scores_'+snapshotdate+'.csv',Asnaps)
 box.upload_file(box_temp+'/HCA_NIH_Toolbox_Raw_'+snapshotdate+'.csv',Asnaps)
 
 #inventory has been independently checked to make sure that no exclusions/withdrawn subjects squeaked in
-
+#update - a V2 subject sneaked in.  This has now been fixed
 
