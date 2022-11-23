@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 
 prepath="/home/petra/Behavioral/Lifespan/PreRelease/"
 sandyA="HCA Excluded Participants_2021May05 (1).xlsx"
@@ -9,7 +10,7 @@ Complain="Subject Complaints"
 
 petra="Lifespan_REDCap_Based_Exclusions_From_PreRelease_NO_DUPS.csv"
 inventorypath='/home/petra/Behavioral/Lifespan/PreRelease/PreRelease/'
-versionold='11_01_2022'
+versionold='11_22_2022'
 
 erinA='HCA-exclusions-EkR.xlsx'
 sheetA='Sheet2'
@@ -56,6 +57,12 @@ petralist['subject']=petralist['subject id'].str.split('_',expand=True)[0]
 petralist.loc[petralist['subject id'].str.upper().str.contains('CC'),'subject']=petralist['subject id']
 petralist['redcap_event']='V1'
 petralist.loc[petralist.subject.isin(['HCD0664656_CC','HCD1106728_CC','HCD0541034_CC']),'redcap_event']='V3'
+#add two back because gonna be released (never came back after covid, and had enough usable data)
+petralist=petralist.loc[~(petralist.subject.isin(['HCD0123824_CC','HCD2059043_CC']))].copy()
+#this guy is redundant
+petralist.loc[petralist.subject.str.contains('HCD2442446')]
+petralist=petralist.loc[~(petralist.subject.isin(['HCD2442446_CC']))].copy()
+
 petralist['PetraUnusable']=1
 
 inventoryA=pd.read_csv(inventorypath+'HCA_AllSources_' + versionold + '.csv')[['subject','IntraDB','DB_Source','redcap_event','event_age']]
@@ -68,6 +75,7 @@ Petra['PreReleaseInventory']=1
 Petra=Petra.drop_duplicates(subset=['redcap_event','subject']).copy()
 petralist=petralist.drop_duplicates(subset=['redcap_event','subject']).copy()
 petralist=petralist.rename(columns={'subject id':'Petra_exclusion'})
+
 Petra2=pd.merge(Petra, petralist, on=['subject','redcap_event'], how='outer')
 PetraSandy=pd.merge(Petra2,Sandy,on=['subject','redcap_event'],how='outer')
 PetraSandyErin=pd.merge(PetraSandy,Erin,on=['subject','redcap_event'],how='outer')
@@ -78,7 +86,6 @@ PetraSandyErin.loc[PetraSandyErin.ErinUnusable.isnull()==True,'ErinUnusable']=0
 
 PetraSandyErin['AnyUnusable']=PetraSandyErin.ErinUnusable + PetraSandyErin.SandyUnusable + PetraSandyErin.PetraUnusable
 PetraSandyErin.redcap_age=PetraSandyErin.redcap_age.round(1)
-import numpy as np
 PetraSandyErin.loc[PetraSandyErin.PetraUnusable==0,'PetraUnusable']=np.nan
 PetraSandyErin.loc[PetraSandyErin.SandyUnusable==0,'SandyUnusable']=np.nan
 PetraSandyErin.loc[PetraSandyErin.ErinUnusable==0,'ErinUnusable']=np.nan
@@ -86,9 +93,33 @@ PetraSandyErin.loc[PetraSandyErin.AnyUnusable==0,'AnyUnusable']=np.nan
 PetraSandyErin['SuggestRelease3.0']=np.nan
 PetraSandyErin.loc[PetraSandyErin.Petra_IntraDB_STG.str.contains('STG')==True,'SuggestRelease3.0']=1
 PetraSandyErin=PetraSandyErin.rename(columns={'Data':'SandyWhatHappened2Data'})
+
+PetraSandyErin.loc[PetraSandyErin.subject=='HCA7297488','Petra_IntraDB_STG'] = 'CCF_HCA_STG'
+Unmergable1=pd.DataFrame([{'subject':'HCA7297488','redcap_event':'V2','Petra_IntraDB_STG':'CCF_HCA_STG','AnyUnusable':'1','PetraUnusable':'1','Petra_exclusion':'HCA7297488_DO NOT RELEASE'}])
+PetraSandyErin=pd.concat([PetraSandyErin,Unmergable1],axis=0)
+
+#COVID SPECIAL STUFF
+data={
+    0: {'subject':'HCD0099752','redcap_event': 'V1','Covid_Comeback':'X1 X2 After'},
+    1: {'subject':'HCD2604749','redcap_event': 'V1','Covid_Comeback':'X1 After'},
+    2: {'subject':'HCD0123824','redcap_event': 'V1','Covid_Comeback':'A Before'},
+    3: {'subject':'HCD2059043','redcap_event': 'V1','Covid_Comeback':'A Before'},
+    4: {'subject':'HCD2648365','redcap_event': 'V1','Covid_Comeback':'X1 After'},
+    5: {'subject':'HCD0664656','redcap_event': 'V3','Covid_Comeback':'X1 After'},
+    6: {'subject':'HCD1106728','redcap_event': 'V3','Covid_Comeback':'X1 After'},
+    7: {'subject':'HCD0541034','redcap_event': 'V3','Covid_Comeback':'X1 After'},
+    8: {'subject':'HCD2442446','redcap_event': 'V1','Covid_Comeback':'A Before, but Excluded'}
+}
+lis = []
+
+for key,val in data.items():
+    lis.append(val)
+Unmergable2 = pd.DataFrame(lis)
+PetraSandyErin=PetraSandyErin.merge(Unmergable2,on=['subject','redcap_event'],how='left')
+
 PetraSandyErin[['subject','redcap_event','redcap_age','PreReleaseInventory', 'Petra_IntraDB_STG', 'SuggestRelease3.0','AnyUnusable','ErinUnusable',
                 'PetraUnusable','SandyUnusable','SandyWhatData','SandyWhatHappened2Data','SandyExclusion','Petra_exclusion',
-        'Erin_exclusion']].to_csv(prepath+'InventoryUnusables_21Nov2022.csv',index=False)
+        'Erin_exclusion','Covid_Comeback']].to_csv(prepath+'InventoryUnusables_22Nov2022.csv',index=False)
 
 #'Sandy_DNR_exclusion', 'Sandy_DNR_moreinfo',
 #'Sandy_IRB_exclusion', 'Sandy_IRB_moreinfo',
