@@ -20,7 +20,8 @@ Complain="Subject Complaints"
 
 petra="Lifespan_REDCap_Based_Exclusions_From_PreRelease_NO_DUPS.csv"
 inventorypath='/home/petra/Behavioral/Lifespan/PreRelease/PreRelease/'
-versionold='11_22_2022'
+#versionold='11_22_2022'
+versionold='02_17_2023'
 
 erinA='HCA-exclusions-EkR.xlsx'
 sheetA='Sheet2'
@@ -102,6 +103,7 @@ PetraSandyErin.loc[PetraSandyErin.ErinUnusable==0,'ErinUnusable']=np.nan
 PetraSandyErin.loc[PetraSandyErin.AnyUnusable==0,'AnyUnusable']=np.nan
 PetraSandyErin['SuggestRelease3.0']=np.nan
 PetraSandyErin.loc[PetraSandyErin.Petra_IntraDB_STG.str.contains('STG')==True,'SuggestRelease3.0']=1
+PetraSandyErin.loc[PetraSandyErin.Petra_IntraDB_STG.str.contains('Behavioral Only')==True,'SuggestRelease3.0']=1
 PetraSandyErin=PetraSandyErin.rename(columns={'Data':'SandyWhatHappened2Data'})
 
 #COVID SPECIAL STUFF
@@ -124,12 +126,12 @@ for key,val in data.items():
 Unmergable2 = pd.DataFrame(lis)
 PetraSandyErin=PetraSandyErin.merge(Unmergable2,on=['subject','redcap_event'],how='left')
 
-#guy with cysts:
-#this is the guy that should be excluded.  was dnr at V1.  probably got a v2 by accident.
-PetraSandyErin.loc[PetraSandyErin.subject=='HCA7297488','Petra_IntraDB_STG'] = 'CCF_HCA_STG'
-Unmergable1=pd.DataFrame([{'subject':'HCA7297488','redcap_event':'V2','Petra_IntraDB_STG':'CCF_HCA_STG','AnyUnusable':1,'PetraUnusable':'1','Petra_exclusion':'HCA7297488_DO NOT RELEASE'}])
-PetraSandyErin=pd.concat([PetraSandyErin,Unmergable1],axis=0)
-PetraSandyErin.loc[PetraSandyErin.subject=='HCA7297488','ITK_URL'] = 'https://intradb.humanconnectome.org/app/action/DisplayItemAction/search_element/xnat%3AsubjectData/search_field/xnat%3AsubjectData.ID/search_value/HCPIntradb_S04139/popup/false/project/CCF_HCA_ITK'
+#guy with cysts - don't exclude afterall
+##this is the guy that should be excluded.  was dnr at V1.  probably got a v2 by accident.
+##PetraSandyErin.loc[PetraSandyErin.subject=='HCA7297488','Petra_IntraDB_STG'] = 'CCF_HCA_STG'
+#Unmergable1=pd.DataFrame([{'subject':'HCA7297488','redcap_event':'V2','Petra_IntraDB_STG':'CCF_HCA_STG','AnyUnusable':1,'PetraUnusable':'1','Petra_exclusion':'HCA7297488_DO NOT RELEASE'}])
+#PetraSandyErin=pd.concat([PetraSandyErin,Unmergable1],axis=0)
+#PetraSandyErin.loc[PetraSandyErin.subject=='HCA7297488','ITK_URL'] = 'https://intradb.humanconnectome.org/app/action/DisplayItemAction/search_element/xnat%3AsubjectData/search_field/xnat%3AsubjectData.ID/search_value/HCPIntradb_S04139/popup/false/project/CCF_HCA_ITK'
 
 PetraSandyErin['Study']=''
 PetraSandyErin.loc[PetraSandyErin.subject.str.contains('HCA'),'Study']='HCA'
@@ -150,27 +152,36 @@ with open('N_Breakdown_Lifespan_Universe_'+snapshotdate+'.txt','w') as f:
     print(PetraSandyErin.Study.value_counts(dropna=False))
 
     print('**********************************************')
-    print('Lifespan Usables')
+    print('Lifespan Usables.  1=one of Sandy/Petra/Erin flagged for unusable.  3=all agree')
     print(PetraSandyErin.AnyUnusable.value_counts(dropna=False))
 
     print('**********************************************')
     print('SANITY CHECK')
     print(pd.crosstab(PetraSandyErin.Petra_IntraDB_STG,PetraSandyErin.Study))
+    print(pd.crosstab(PetraSandyErin.Petra_IntraDB_STG,PetraSandyErin.Study))
 
     print('**********************************************')
-    print('1st Breakdown: Exclude all subjects in Erin/Petra/Sandy Lists (including the questionable DNR), exclude PCMP')
+    print('1st Breakdown: Exclude all subjects in Erin/Petra/Sandy Lists , exclude PCMP')
     print('and EXCLUDE subjects with Behavioral Data Only:')
-    for i in ['HCA','HCD']:
-        print('******************************************')
-        print(i,':')
-        subset=PetraSandyErin.loc[PetraSandyErin.Study==i]
-        print(pd.crosstab(subset['SuggestRelease3.0'], subset.redcap_event))#.to_csv('.csv',index=True)
+    #for i in ['HCA','HCD']:
+    print('******************************************')
+    #print(i,':')
+    #subset=PetraSandyErin.loc[(PetraSandyErin.Study==i) & (~(PetraSandyErin.Petra_IntraDB_STG == "Behavioral Only"))]
+    subset = PetraSandyErin.loc[(PetraSandyErin['SuggestRelease3.0'] == 1) & (~(PetraSandyErin.Petra_IntraDB_STG == "Behavioral Only"))]
+    #print(pd.crosstab(subset['SuggestRelease3.0'], subset.redcap_event))#.to_csv('.csv',index=True)
+    print(pd.crosstab(subset['Study'], subset.redcap_event))  # .to_csv('.csv',index=True)
 
     print('**********************************************')
-    print('2nd Breakdown: Exclude all subjects in Erin/Petra/Sandy Lists (including the questionable DNR), exclude PCMP')
+    print('2nd Breakdown (suggested release): Exclude all subjects in Erin/Petra/Sandy Lists , exclude PCMP')
     print('and INCLUDE subjects with Behavioral Data Only:')
-    subset2=PetraSandyErin.loc[(PetraSandyErin['SuggestRelease3.0']==1) | (PetraSandyErin.Petra_IntraDB_STG == "Behavioral Only")]
+    subset2=PetraSandyErin.loc[(PetraSandyErin['SuggestRelease3.0']==1) ]
     print(pd.crosstab(subset2['Study'], subset2.redcap_event))#.to_csv('.csv',index=True)
+
+    print('**********************************************')
+    print('Behavioral Only Breakdown')
+    subset3=PetraSandyErin.loc[PetraSandyErin.Petra_IntraDB_STG == "Behavioral Only"]
+    print(pd.crosstab(PetraSandyErin.Study,subset3.redcap_event))
+
 
     #URLs for the interesting guys
     print('**********************************************')
