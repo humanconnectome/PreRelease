@@ -42,7 +42,7 @@ DrestrictSnaps=150226955672
 
 inventorypath='/home/petra/Behavioral/Lifespan/PreRelease/PreRelease/'
 #version='2022_01_19'
-versionold='11_22_2022'
+versionold='02_17_2023'
 #version=snapshotdate
 snapshotdate
 
@@ -106,10 +106,10 @@ restrictedS=getlist(a[0],'SSAGA')
 restrictedTLBXS=getlist(a[0],'TLBX_Scores')
 restrictedTLBXR=getlist(a[0],'TLBX_Raw')
 
-ddict_file=[905784566785]
-b=box.download_files(ddict_file)
-b2=pd.read_excel(b[0], sheet_name='VariablesInMoodRecords')
-moodvars=list(b2.varsInMood)
+#ddict_file=[905784566785]
+#b=box.download_files(ddict_file)
+#b2=pd.read_excel(b[0], sheet_name='VariablesInMoodRecords')
+#moodvars=list(b2.varsInMood)
 
 
 #note that some of the parameters in these macros not used anymore...wanted to leave them in in future versions of this code
@@ -479,6 +479,7 @@ flaggedssaga, dfss, dfssres=getredcap7('ssaga',Asnaps,ArestrictSnaps,flaggedgold
 #subject has no SSAGA data, but confirm
 dfss.loc[((dfss.subject=='HCA9461182'))]# & (dfss.redcap_event_name=='visit_2_arm_1'))]
 dfss.loc[((dfss.study_id=='9531-258'))]# & (dfss.redcap_event_name=='visit_2_arm_1'))]
+dfss.loc[dfss.subject=="HCA7297488"]
 
 link=dfss.loc[dfss.hcpa_id.isnull()==False][['hcpa_id','study_id']]
 link=link.loc[~(link.hcpa_id=="")]
@@ -664,8 +665,6 @@ box.upload_file(box_temp + '/' + studystr + '_' + idstring + '_Restricted_' + sn
 
 
 ##############################
-
-
 eprime=box.downloadFile(495490047901)
 eprimed=pd.read_csv(eprime,header=0)
 eprimed=eprimed.loc[(eprimed.subject.isin(goodidsD))].copy()
@@ -677,6 +676,7 @@ box.upload_file(box_temp+'/HCD_Eprime_'+snapshotdate+'.csv',Dsnaps)
 penncnp=box.downloadFile(452784840845)
 #penn=pd.read_csv(box_temp+'/'+penncnp.get().name,header=0,encoding = "ISO-8859-1")
 penn=pd.read_csv(penncnp,header=0,encoding = "ISO-8859-1")
+#no PennCNP V2 data for HCA9461182
 
 print(penn.shape)
 penn=penn.loc[~(penn.p_unusable==1)]
@@ -691,6 +691,7 @@ penn['redcap_event']=penn.assessment
 print(penn.shape)
 print(penn.columns)
 #no Penn data for ['HCD0123824','HCD2059043']
+penn.loc[penn.subject=="HCA7297488"]
 
 penn.loc[penn.subid.str.contains('HCA')].to_csv(box_temp+'/HCA_PennCNP_'+snapshotdate+'.csv',index=False)
 penn.loc[penn.subid.str.contains('HCD')].to_csv(box_temp+'/HCD_PennCNP_'+snapshotdate+'.csv',index=False)
@@ -818,6 +819,7 @@ for i in [rawhs,rwus,rums,rucs]:
 print(DS.shape)
 print(RawDS.shape)
 
+#HCA9461182 V2 not in TLBX - checked via grep
 
 DS.to_csv(box_temp+'/HCD_NIH-Toolbox-Scores_'+snapshotdate+'.csv',index=False)
 RawDS.to_csv(box_temp+'/HCD_NIH-Toolbox-Raw_'+snapshotdate+'.csv',index=False)
