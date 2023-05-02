@@ -144,12 +144,12 @@ PetraSandyErin[['subject','redcap_event','SuggestRelease3.0', 'Petra_IntraDB_STG
 
 
 # Saving the reference of the standard output
-original_stdout = sys.stdout
-with open('N_Breakdown_Lifespan_Universe_'+snapshotdate+'.txt','w') as f:
-    sys.stdout = f
-    print('**********************************************')
-    print('Lifespan Universe')
-    print(PetraSandyErin.Study.value_counts(dropna=False))
+#original_stdout = sys.stdout
+#with open('N_Breakdown_Lifespan_Universe_'+snapshotdate+'.txt','w') as f:
+    #sys.stdout = f
+    #print('**********************************************')
+    #print('Lifespan Universe')
+    #print(PetraSandyErin.Study.value_counts(dropna=False))
 
     print('**********************************************')
     print('Lifespan Usables.  1=one of Sandy/Petra/Erin flagged for unusable.  3=all agree')
@@ -158,7 +158,7 @@ with open('N_Breakdown_Lifespan_Universe_'+snapshotdate+'.txt','w') as f:
     print('**********************************************')
     print('SANITY CHECK')
     print(pd.crosstab(PetraSandyErin.Petra_IntraDB_STG,PetraSandyErin.Study))
-    print(pd.crosstab(PetraSandyErin.Petra_IntraDB_STG,PetraSandyErin.Study))
+    pd.DataFrame(PetraSandyErin.AnyUnusable.value_counts(dropna=False)).to_csv("UniverseBreakdown1.csv")
 
     print('**********************************************')
     print('1st Breakdown: Exclude all subjects in Erin/Petra/Sandy Lists , exclude PCMP')
@@ -170,24 +170,26 @@ with open('N_Breakdown_Lifespan_Universe_'+snapshotdate+'.txt','w') as f:
     subset = PetraSandyErin.loc[(PetraSandyErin['SuggestRelease3.0'] == 1) & (~(PetraSandyErin.Petra_IntraDB_STG == "Behavioral Only"))]
     #print(pd.crosstab(subset['SuggestRelease3.0'], subset.redcap_event))#.to_csv('.csv',index=True)
     print(pd.crosstab(subset['Study'], subset.redcap_event))  # .to_csv('.csv',index=True)
+    pd.DataFrame(pd.crosstab(subset['Study'], subset.redcap_event)).to_csv("UniverseBreakdown2.csv")
 
     print('**********************************************')
     print('2nd Breakdown (suggested release): Exclude all subjects in Erin/Petra/Sandy Lists , exclude PCMP')
     print('and INCLUDE subjects with Behavioral Data Only:')
     subset2=PetraSandyErin.loc[(PetraSandyErin['SuggestRelease3.0']==1) ]
     print(pd.crosstab(subset2['Study'], subset2.redcap_event))#.to_csv('.csv',index=True)
-
+    pd.DataFrame(pd.crosstab(subset2['Study'], subset2.redcap_event)).to_csv("UniverseBreakdown3.csv")
     print('**********************************************')
     print('Behavioral Only Breakdown')
     subset3=PetraSandyErin.loc[PetraSandyErin.Petra_IntraDB_STG == "Behavioral Only"]
     print(pd.crosstab(PetraSandyErin.Study,subset3.redcap_event))
+    pd.DataFrame(pd.crosstab(PetraSandyErin.Study,subset3.redcap_event)).to_csv("UniverseBreakdown4.csv")
 
 
     #URLs for the interesting guys
     print('**********************************************')
     print("URLs for the interesting guys")
     print(PetraSandyErin.loc[PetraSandyErin.ITK_URL.isnull()==False][['subject','redcap_event','AnyUnusable','Covid_Comeback','ITK_URL']])
-    sys.stdout = original_stdout
+    #sys.stdout = original_stdout
 
 
 

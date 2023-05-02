@@ -179,7 +179,7 @@ def getredcap7(studystr,curatedsnaps,restrictedsnaps,flaggedgold=pd.DataFrame(),
     print(df.shape)
     return flaggedids, df, dfrestricted
 
-#these are misnomers.  please flip studystr and idstring when calling function
+
 def getredcap10Q(studystr,curatedsnaps,goodies,idstring,restrictedcols=[]):
     """
     downloads all events and fields in a redcap database
