@@ -8,6 +8,7 @@ import pandas as pd
 from io import BytesIO
 import os
 from shutil import copyfile
+import numpy as np
 
 import ccf
 from ccf.box import LifespanBox
@@ -40,14 +41,15 @@ DrestrictSnaps=150226955672
 #REORGANIZED AROUND INVENTORY:
 #this is the latest inventory
 
-inventorypath='/home/petra/Behavioral/Lifespan/PreRelease/PreRelease/'
+inventorypath='/Users/petralenzini/work/Behavioral/Lifespan/PreRelease/PreRelease/'
 #version='2022_01_19'
-versionold='02_17_2023'
+versionold='07_14_2023'
 #version=snapshotdate
 snapshotdate
 
 inventoryA=pd.read_csv(inventorypath+'HCA_AllSources_' + versionold + '.csv')
-inventoryD=pd.read_csv(inventorypath+'HCD_AllSources_' + versionold + '.csv')
+#inventoryD=pd.read_csv(inventorypath+'HCD_AllSources_' + versionold + '.csv')
+inventoryD=pd.read_csv(inventorypath+'HCD_Inventory_2023-02-17.csv')
 goodidsD=list(inventoryD.subject.unique())
 goodidsA=list(inventoryA.subject.unique())
 
@@ -442,11 +444,33 @@ test2.loc[test2._merge=='right_only' ][['subject','redcap_event']]
 flaggedhcpa, df, dfrestricted=getredcap7('hcpa',Asnaps,ArestrictSnaps,flaggedgold=pd.DataFrame(),restrictedcols=restrictedA)
 #now merge with inventory to get rid of empty events and make doubly sure there are no excluded subjects
 #some subjects did Covid1 but not covid2 and vice versa.  Both are the 'covid' 'redcap_event_name'.
+#this person lost abiility to provide informed consent:
 df=df.loc[~((df.subject=='HCA9461182') & (df.redcap_event_name=='visit_2_arm_1'))].copy()
 dfrestricted=dfrestricted.loc[~((dfrestricted.subject=='HCA9461182') & (dfrestricted.redcap_event_name=='visit_2_arm_1'))].copy()
 
-test=inventoryA.drop_duplicates(subset=['subject','REDCap_id','redcap_event_name'])
+#drop facename out of scanner task data for subjects that completed the wrong recall:
+fieldlist=['cb1_1a','cb1_1a_other',
+           'cb1_2a','cb1_2a_other','cb1_3a','cb1_3a_other','cb1_4a',
+           'cb1_4a_other','cb1_5a','cb1_5a_other','cb1_6a','cb1_6a_other','cb1_7a',
+           'cb1_7a_other','cb1_8a','cb1_8a_other','cb1_9a','cb1_9a_other','cb1_10a','cb1_10a_other',
+           'cb2_1a','cb2_1a_other','cb2_2a','cb2_2a_other','cb2_3a','cb2_3a_other','cb2_4a',
+           'cb2_4a_other','cb2_5a','cb2_5a_other','cb2_6a','cb2_6a_other','cb2_7a','cb2_7a_other',
+           'cb2_8a','cb2_8a_other','cb2_9a','cb2_9a_other','cb2_10a','cb2_10a_other']
+idsV1=['HCA8532174', 'HCA6333158', 'HCA8557796']
+idsV2=['HCA9435080', 'HCA8368490', 'HCA8735289', 'HCA6302349', 'HCA7530670', 'HCA6333158', 'HCA9295494']
+#check before and after
+#df.loc[(df.subject.isin(idsV1)) & (df.redcap_event=='V1')][fieldlist+['counterbalance_v1','counterbalance_v2']]
+#df.loc[(df.subject.isin(idsV2)) & (df.redcap_event=='V2')][fieldlist+['counterbalance_v2']]
+#df.loc[(df.subject.isin(idsV2)) & (df.redcap_event=='V1')][fieldlist+['counterbalance_v1','counterbalance_v2']]
 
+#counterbalance variables are both stored at V1 so need to set V2 to missing by hand
+for i in fieldlist+['counterbalance_v1']:
+        df.loc[(df.subject.isin(idsV1)) & (df.redcap_event == 'V1'), i] = ''
+for i in fieldlist:
+    df.loc[(df.subject.isin(idsV2)) & (df.redcap_event == 'V2'), i] = ''
+df.loc[(df.subject.isin(idsV2)) & (df.redcap_event == 'V1'), 'counterbalance_v2'] = ''
+
+test=inventoryA.drop_duplicates(subset=['subject','REDCap_id','redcap_event_name'])
 inventdf=pd.merge(test[['REDCap_id','redcap_event_name']],df, left_on=['REDCap_id','redcap_event_name'],right_on=['id','redcap_event_name'],how='left')
 inventdf=inventdf.drop(columns='REDCap_id')
 print(df.shape)
@@ -454,6 +478,12 @@ print(inventoryA.shape)
 print(inventdf.shape)
 
 #restricted
+for i in fieldlist+['counterbalance_v1']:
+        dfrestricted.loc[(dfrestricted.subject.isin(idsV1)) & (dfrestricted.redcap_event == 'V1'), i] = ''
+for i in fieldlist:
+    dfrestricted.loc[(dfrestricted.subject.isin(idsV2)) & (dfrestricted.redcap_event == 'V2'), i] = ''
+dfrestricted.loc[(dfrestricted.subject.isin(idsV2)) & (dfrestricted.redcap_event == 'V1'), 'counterbalance_v2'] = ''
+
 inventdfrestricted=pd.merge(test[['REDCap_id','redcap_event_name']],dfrestricted, left_on=['REDCap_id','redcap_event_name'],right_on=['id','redcap_event_name'],how='left')
 inventdfrestricted=inventdfrestricted.drop(columns='REDCap_id')
 print(df.shape)
@@ -819,7 +849,18 @@ for i in [rawhs,rwus,rums,rucs]:
 print(DS.shape)
 print(RawDS.shape)
 
+# update July 2023 - remove instruments that are protocol deviations
 #HCA9461182 V2 not in TLBX - checked via grep
+#remove instruments that are known protocol deviations and fix a typo
+RawDS.loc[(RawDS.Inst == "NIH Toolbox Pattern Comparison Processing Speed Vest Age`7+ v2.1"), 'Inst'] = "NIH Toolbox Pattern Comparison Processing Speed Test Age 7+ v2.1"
+protocoldevD=['NIH Toolbox General Life Satisfaction FF Age 18+ v2.0',
+                 'NIH Toolbox Picture Sequence Memory Test Age 8+ Form C v2.1 (Remote Admin)',
+                 'NIH Toolbox Picture Sequence Memory Test Ages 3-4 Form A v2.1']
+RawDS=RawDS.loc[~(RawDS.Inst.isin(protocoldevD))]
+DS=DS.loc[~(DS.Inst.isin(protocoldevD))]
+
+print(DS.shape)
+print(RawDS.shape)
 
 DS.to_csv(box_temp+'/HCD_NIH-Toolbox-Scores_'+snapshotdate+'.csv',index=False)
 RawDS.to_csv(box_temp+'/HCD_NIH-Toolbox-Raw_'+snapshotdate+'.csv',index=False)
@@ -850,6 +891,28 @@ for i in [amgr,awuar,aumnr,aucr]:
 
 print(AS.shape)
 print(RawAS.shape)
+RawDS.loc[(RawDS.Inst == "NIH Toolbox Pattern Comparison Processing Speed Vest Age`7+ v2.1"), 'Inst'] = "NIH Toolbox Pattern Comparison Processing Speed Test Age 7+ v2.1"
+protocoldevA=['NIH Toolbox Fear FF Ages 8-17 v2.0',
+                 'NIH Toolbox Perceived Stress FF Ages 13-17 v2.0',
+                 'NIH Toolbox Perceived Hostility FF Ages 8-17 v2.0',
+                 'NIH Toolbox Fear-Affect FF Age 18+ v2.0',
+                 'NIH Toolbox General Life Satisfaction FF Age 18+ v2.0',
+                 'NIH Toolbox 9-Hole Pegboard Dexterity Test Age 3+ v2.0',
+                 'NIH Toolbox Positive Affect FF Ages 13-17 v2.0',
+                 'NIH Toolbox Emotional Support FF Ages 8-17 v2.0',
+                 'NIH Toolbox Friendship FF Ages 8-17 v2.0',
+                 'NIH Toolbox Loneliness FF Ages 8-17 v2.0',
+                 'NIH Toolbox Perceived Rejection FF Ages 8-17 v2.0',
+                 'NIH Toolbox Self-Efficacy CAT Ages 13-17 v2.0',
+                 'NIH Toolbox Sadness FF Ages 8-17 v2.0',
+                 'NIH Toolbox Anger FF Ages 8-17 v2.0',
+                 'NIH Toolbox Odor Identification Test Age 10+ v2.0']
+RawAS=RawAS.loc[~(RawAS.Inst.isin(protocoldevA))]
+AS=AS.loc[~(AS.Inst.isin(protocoldevA))]
+print(AS.shape)
+print(RawAS.shape)
+
+
 AS.to_csv(box_temp+'/HCA_NIH_Toolbox_Scores_'+snapshotdate+'.csv',index=False)
 RawAS.to_csv(box_temp+'/HCA_NIH_Toolbox_Raw_'+snapshotdate+'.csv',index=False)
 box.upload_file(box_temp+'/HCA_NIH_Toolbox_Scores_'+snapshotdate+'.csv',Asnaps)
