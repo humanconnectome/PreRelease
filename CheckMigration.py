@@ -164,7 +164,36 @@ def prepdiff(study7,study13,name,sortv=['id','redcap_event_name'],dropcols=['sal
     diffs8.to_csv('Migration_Diffs_part8_'+name+'_21Dec2023.csv')
 
 
-
+def comparedictions(dlpath1,sev1,thirt1):
+    seven1 = dlpath1 + sev1
+    thirteen1 = dlpath1 + thirt1
+    sevdict=pd.read_csv(seven1).drop(columns=['Field Label'])
+    sevdict['Choices, Calculations, OR Slider Labels']=sevdict['Choices, Calculations, OR Slider Labels'].str.replace(" ","")
+    sevdict['Field Annotation']=sevdict['Field Annotation'].str.replace(" ","")
+    sevdict['Branching Logic (Show field only if...)']=sevdict['Branching Logic (Show field only if...)'].str.replace(" ","")
+    thirt=pd.read_csv(thirteen1).drop(columns=['Field Label'])
+    thirt['Choices, Calculations, OR Slider Labels'] = thirt['Choices, Calculations, OR Slider Labels'].str.replace(" ", "")
+    thirt['Field Annotation'] = thirt['Field Annotation'].str.replace(" ", "")
+    thirt['Branching Logic (Show field only if...)']=thirt['Branching Logic (Show field only if...)'].str.replace(" ","")
+    incommon=pd.merge(thirt[['Variable / Field Name']],sevdict[['Variable / Field Name']], on='Variable / Field Name',how='outer',indicator=True)
+    sevenonly=incommon.loc[incommon._merge=='right_only']
+    thirteenonly = incommon.loc[incommon._merge == 'left_only']
+    only=pd.concat([sevenonly,thirteenonly])
+    incommon = incommon.loc[incommon._merge == 'both'].drop(columns=['_merge'])
+    common = list(incommon['Variable / Field Name'])
+    sevdict=sevdict.loc[sevdict['Variable / Field Name'].isin(common)].copy()
+    thirt = thirt.loc[thirt['Variable / Field Name'].isin(common)].copy()
+    thirt.reset_index(inplace=True)
+    sevdict.reset_index(inplace=True)
+    sevdict.columns=thirt.columns
+    sevdict = sevdict.set_index('Variable / Field Name')
+    thirt = thirt.set_index('Variable / Field Name')
+    sevdict.index=thirt.index
+    #sevdict.to_csv('test7.csv')
+    #thirt.to_csv('test13.csv')
+    compare=sevdict.compare(thirt)  # , align_axis=0)
+    return compare, only
+dlpath1='/Users/petralenzini/work/Behavioral/Lifespan/PreRelease/PreRelease/'
 
 #HCA
 hca7=getredcap7('hca7',restrictedcols=[])
@@ -175,12 +204,16 @@ droppedhca7=pd.merge(hca7,hca13[['id', 'redcap_event_name']], on=['id', 'redcap_
 droppedhca7.loc[droppedhca7._merge=='left_only']
 droppedhca7.loc[droppedhca7._merge=='right_only']
 #check values in spreadsheeets:
-#the following columns will show differences that are present simply because number of days has increased...scientifically irrelevant
-#information that was used to track participant progress
-#OR, diffs were because of rounding issues during comparison, NOT during conversion (straw10, 77.95 vs 78 age)
-#'days2bd','days2bd','v1days2yearfollowup','v1days2yearfollowup','days2repeatsession','days2repeatsession','v6_data','v1_rater','cholesterol','ureanitrogen']
 prepdiff(hca7,hca13,"HCA",sortv=['id','redcap_event_name'],dropcols=[])
 
+#HCA dictionary
+thirt1='HCPAV13Destination_DataDictionary_2024-01-02.csv'
+sev1='HCPA_DataDictionary_2024-01-02.csv'
+hcadiffs,only=comparedictions(dlpath1,sev1,thirt1)
+hcadiffs.to_csv(dlpath1+"HCA_Dictionaries_v7vs13_inboth.csv")
+only.to_csv(dlpath1+"HCA_Dictionaries_v7vsv13_onlyinone.csv")
+
+############################################
 #HCD Child
 child7=getredcap7('child7',restrictedcols=[])
 child13=red13('child13',restrictedcols=[])
@@ -189,16 +222,19 @@ diffcols(child7,child13,'CHILD7','CHILD13')
 droppedchild7=pd.merge(child7,child13[['id', 'redcap_event_name']], on=['id', 'redcap_event_name'], how='outer', indicator=True)
 droppedchild7.loc[droppedchild7._merge=='left_only'].to_csv('Migration_Dropped_Empty_Child_21Dec2023.csv',index=False)
 #check values in spreadsheeets:
-#hand total was incorrectly zero in redcap 7.  EATQ values aren't different...just showing up different because of rounding in validation
-#fp_pubertal_missing is 5 for everyone in v1 or v3.  Can't make this go away because bulk recalc doesn't seem to be working
-#should be empty, but 5 means everything is missing, so its not a huge deal.
-#hand total was calculated for 3 people in v7 who were missing a couple operands.  This shouldn't have been done.
 #misrepcap variables are housekeeping variables.  They won't load.  Maybe because of the quadruple underscore?  Either way, they are
 #not helpful or consistent and should be dropped
 mrep=[mr for mr in list(child7.columns) if 'missrepcap' in mr]
 prepdiff(child7,child13,"HCD-Child",sortv=['id','redcap_event_name'],dropcols=[]+mrep)
 ### Columns and Rows check PASS. Dropped rows are empty
+#CHILD dictionary
+thirt1='HCPDChildMigrate_DataDictionary_2024-01-02.csv'
+sev1='HCPDChild_DataDictionary_2024-01-02.csv'
+hcadiffs,only=comparedictions(dlpath1,sev1,thirt1)
+hcadiffs.to_csv(dlpath1+"Child_Dictionaries_v7vs13_inboth.csv")
+only.to_csv(dlpath1+"Child_Dictionaries_v7vsv13_onlyinone.csv")
 
+##################################################
 #PARENT
 parent7=getredcap7('parent7',restrictedcols=[])
 parent13=red13('parent13',restrictedcols=[])
@@ -207,6 +243,13 @@ diffcols(parent7,parent13,'PARENT7','PARENT13')
 prepdiff(parent7,parent13,"HCD-Parent",sortv=['id','redcap_event_name'],dropcols=[])
 ## Columns and Rows check PASS
 
+#Parent dictionary
+thirt1='HCPDParentMigrate_DataDictionary_2024-01-02.csv'
+sev1='HCPDParent_DataDictionary_2024-01-02.csv'
+hcadiffs,only=comparedictions(dlpath1,sev1,thirt1)
+hcadiffs.to_csv(dlpath1+"Parent_Dictionaries_v7vs13_inboth.csv")
+only.to_csv(dlpath1+"Parent_Dictionaries_v7vsv13_onlyinone.csv")
+
 #TEEN
 teen7=getredcap7('teen7',restrictedcols=[])
 teen13=red13('teen13',restrictedcols=[])
@@ -214,22 +257,20 @@ diffcols(teen7,teen13,'TEEN7','TEEN13')
 teen7.misscog___.value_counts(dropna=False)
 prepdiff(teen7,teen13,"HCD-Teen",sortv=['id','redcap_event_name'],dropcols=[])
 ## Columns and Rows check PASS
+thirt1='HCPD18Migrate_DataDictionary_2024-01-02.csv'
+sev1='HCPD18_DataDictionary_2024-01-02.csv'
+hcadiffs,only=comparedictions(dlpath1,sev1,thirt1)
+hcadiffs.to_csv(dlpath1+"Teen_Dictionaries_v7vs13_inboth.csv")
+only.to_csv(dlpath1+"Teen_Dictionaries_v7vsv13_onlyinone.csv")
 
 ssaga7=getredcap7('ssaga7',restrictedcols=[])
 ssaga13=red13('ssaga13',restrictedcols=[])
 diffcols(ssaga7,ssaga13,'SSAGA7','SSAGA13')
 prepdiff(ssaga7,ssaga13,"SSAGA",sortv=['study_id','redcap_event_name'],dropcols=[])
-## Columns and Rows check PASS
-thirt1='HCPAV13Destination_DataDictionary_2023-12-31.csv'
-sev1='HCPA_DataDictionary_2023-12-31.csv'
-dlpath1='/Users/petralenzini/work/Behavioral/Lifespan/PreRelease/PreRelease/'
-seven1=dlpath1+sev1
-thirteen1=dlpath1+thirt1
+thirt1='SSAGAmigrate_DataDictionary_2024-01-02.csv'
+sev1='SSAGA_DataDictionary_2024-01-02.csv'
+hcadiffs,only=comparedictions(dlpath1,sev1,thirt1)
+hcadiffs.to_csv(dlpath1+"SSAGA_Dictionaries_v7vs13_inboth.csv")
+only.to_csv(dlpath1+"SSAGA_Dictionaries_v7vsv13_onlyinone.csv")
 
-def comparedictions(seven1,thirteen1):
-    sevdict=pd.read_csv(seven1)
-    thirt=pd.read_csv(thirteen1)
-    return sevdict.compare(thirt)  # , align_axis=0)
 
-hcadiffs=comparedictions(seven1,thirteen1)
-hcadiffs.to_csv(dlpath1+"HCA_Dictionaries_v7vs13.csv",index=False)
